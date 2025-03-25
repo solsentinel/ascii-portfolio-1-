@@ -29,13 +29,13 @@ export default function BootSequence() {
     <div className="flex flex-col items-center justify-center h-full">
       <div className="w-full max-w-2xl bg-black/70 p-8 rounded-md border border-primary/30 font-mono text-primary">
         <div className="mb-6 text-center">
-          <pre className="text-xs sm:text-sm md:text-base whitespace-pre overflow-x-auto">
+          <pre className="text-xs sm:text-sm md:text-base whitespace-pre overflow-x-auto font-mono">
             {`
   ██████╗ ██████╗  ██████╗ ███╗   ███╗██╗██╗  ██╗███████╗██╗     
   ██╔══██╗██╔══██╗██╔═══██╗████╗ ████║██║╚██╗██╔╝██╔════╝██║     
   ██████╔╝██████╔╝██║   ██║██╔████╔██║██║ ╚███╔╝ █████╗  ██║     
   ██╔═══╝ ██╔══██╗██║   ██║██║╚██╔╝██║██║ ██╔██╗ ██╔══╝  ██║     
-  ██║     ██║  ██║╚██████╔╝██║ ╚═╝ ██║██║██╔╝ ██╗███████╗███████╗
+  ██║     ██║  ██║╚██████╔╝██║ ╚═╝ ██║██║██║██╔╝ ██╗███████╗███████╗
   ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝╚═╝  ╚═╝╚══════╝╚══════╝
                                                                   
 `}
@@ -45,8 +45,8 @@ export default function BootSequence() {
         <div className="space-y-2">
           {bootMessages.slice(0, currentMessageIndex).map((message, index) => (
             <div key={index} className="flex">
-              <span className="text-primary mr-2">&gt;</span>
-              <span className="text-foreground/90">{message}</span>
+              <span className="text-primary mr-2 font-mono">&gt;</span>
+              <span className="text-foreground/90 font-mono">{message}</span>
               {index === currentMessageIndex - 1 && index !== bootMessages.length - 1 && (
                 <span className="ml-1 cursor-blink">_</span>
               )}
@@ -55,8 +55,8 @@ export default function BootSequence() {
 
           {currentMessageIndex === bootMessages.length && (
             <div className="flex mt-4">
-              <span className="text-primary mr-2">&gt;</span>
-              <span className="typing-animation text-foreground/90">
+              <span className="text-primary mr-2 font-mono">&gt;</span>
+              <span className="typing-animation text-foreground/90 font-mono">
                 Boot sequence complete. Promixel pixel art generator ready.
               </span>
               <span className="cursor-blink">_</span>

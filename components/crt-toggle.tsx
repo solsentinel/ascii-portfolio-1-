@@ -39,7 +39,7 @@ export function CRTToggle() {
       className="data-[state=on]:bg-primary/20"
     >
       <Monitor className="h-4 w-4 mr-2" />
-      CRT Effect
+      <span style={{ fontFamily: "var(--font-pixel)" }}>CRT Effect</span>
     </Toggle>
   )
 }

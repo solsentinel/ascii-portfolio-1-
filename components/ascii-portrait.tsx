@@ -61,7 +61,7 @@ export function AsciiPortrait({ width = 60, height = 80 }: AsciiPortraitProps) {
 
           // Use color from image
           ctx.fillStyle = `rgb(${r},${g},${b})`
-          ctx.font = '8px "JetBrains Mono"'
+          ctx.font = '8px var(--font-mono, monospace)'
           ctx.fillText(char, x * 8, y * 8)
         }
       }

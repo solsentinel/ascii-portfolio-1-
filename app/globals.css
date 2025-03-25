@@ -52,9 +52,14 @@
 @layer base {
   * {
     @apply border-border;
+    font-family: var(--font-pixel), monospace;
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Preserve monospace font for terminal input/output and code elements */
+  input, textarea, pre, code, .font-mono {
+    font-family: var(--font-mono, monospace);
   }
 }
 
