@@ -7,22 +7,39 @@ type RateLimitInfo = {
 };
 
 // In-memory store for rate limiting (will reset on server restart)
-// In a production app, you'd use a database or Redis for this
+// TODO: In production, replace this with a persistent store like Redis or a database
+// to ensure rate limits persist across server restarts and multiple instances
 const rateLimits = new Map<string, RateLimitInfo>();
 
 // Credit limit per hour
 const CREDITS_LIMIT = 10;
 const COOLDOWN_PERIOD_MS = 60 * 60 * 1000; // 1 hour in milliseconds
 
+// Helper function to get client IP safely
+function getClientIp(request: Request): string {
+  // Get IP from headers - handle proxies and load balancers
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  
+  if (forwardedFor) {
+    // Get the first IP in the list (client IP)
+    const ips = forwardedFor.split(',').map(ip => ip.trim());
+    if (ips.length > 0 && ips[0]) {
+      return ips[0];
+    }
+  }
+  
+  // Fallbacks
+  return request.headers.get('x-real-ip') || 
+         request.headers.get('cf-connecting-ip') || // Cloudflare
+         'unknown-ip';
+}
+
 export async function POST(request: Request) {
   try {
     const { prompt, width = 256, height = 256, num_images = 1 } = await request.json();
 
-    // Get IP address from request (this is simplified)
-    // In a real app, you'd use a more robust user identification method
-    const ipAddress = request.headers.get('x-forwarded-for') || 
-                       request.headers.get('x-real-ip') || 
-                       'unknown';
+    // Get client IP using the helper function
+    const ipAddress = getClientIp(request);
                    
     // Check rate limit for this IP
     const now = Date.now();
@@ -45,7 +62,7 @@ export async function POST(request: Request) {
         imageUrl: "https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Credit+Limit+Reached",
         pixelArtAscii: "",
         prompt: prompt || ""
-      });
+      }, { status: 429 }); // 429 Too Many Requests
     }
     
     // Check if prompt is provided
@@ -57,7 +74,8 @@ export async function POST(request: Request) {
           imageUrl: "https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Missing+Prompt",
           pixelArtAscii: "",
           prompt: ""
-        }
+        },
+        { status: 400 } // 400 Bad Request
       );
     }
     
@@ -77,7 +95,8 @@ export async function POST(request: Request) {
           imageUrl: "https://via.placeholder.com/256x256/1a1a1a/ffffff?text=API+Error",
           pixelArtAscii: "",
           prompt: prompt || ""
-        }
+        },
+        { status: 500 } // 500 Internal Server Error
       );
     }
     
@@ -128,7 +147,8 @@ export async function POST(request: Request) {
           imageUrl: "https://via.placeholder.com/256x256/1a1a1a/ffffff?text=API+Error",
           pixelArtAscii: "",
           prompt: prompt || ""
-        }
+        },
+        { status: response.status }
       );
     }
     
@@ -192,7 +212,8 @@ export async function POST(request: Request) {
         imageUrl: "https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Error",
         pixelArtAscii: "",
         prompt: ""
-      }
+      },
+      { status: 500 } // 500 Internal Server Error
     );
   }
 }

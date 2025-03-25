@@ -291,7 +291,7 @@ export const Terminal = () => {
             {Object.entries(commands).map(([cmd, desc]) => (
               <div key={cmd} className="text-xs ml-2">
                 <span className="text-cyan-400 font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
-              </div>
+      </div>
             ))}
             <div className="text-xs mt-2 text-amber-300">
               Note: Limited to 10 image generations per hour.
@@ -410,13 +410,13 @@ export const Terminal = () => {
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+          </div>
+        ))}
               </div>
             </div>
           )}
-        </div>
-        
+      </div>
+
         <form 
           onSubmit={handleSubmit} 
           className="flex bg-black/80 rounded-b-lg overflow-hidden border-x border-b border-white/10 pixel-effect"

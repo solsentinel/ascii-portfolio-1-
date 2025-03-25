@@ -10,8 +10,36 @@ export interface PixelArtResponse {
   error?: string;
 }
 
+// Sanitize prompt before sending to API
+function sanitizePrompt(prompt: string): string {
+  if (!prompt) return '';
+  
+  // Remove any HTML tags that could be used for XSS
+  const sanitized = prompt
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;');
+    
+  // Trim and limit length
+  return sanitized.trim().substring(0, 1000);
+}
+
 export async function generatePixelArt(prompt: string): Promise<PixelArtResponse> {
   console.log(`Generating pixel art for prompt: "${prompt}"`);
+
+  if (!prompt || prompt.trim() === '') {
+    return {
+      imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Empty+Prompt',
+      message: 'Please provide a prompt',
+      prompt: '',
+    };
+  }
+
+  // Sanitize the prompt
+  const sanitizedPrompt = sanitizePrompt(prompt);
 
   try {
     const response = await fetch('/api/retrodiffusion', {
@@ -19,7 +47,7 @@ export async function generatePixelArt(prompt: string): Promise<PixelArtResponse
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt: sanitizedPrompt }),
     });
 
     if (!response.ok) {
@@ -43,7 +71,7 @@ export async function generatePixelArt(prompt: string): Promise<PixelArtResponse
       return {
         imageUrl: `https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Error:+${response.status}`,
         message: errorMessage,
-        prompt,
+        prompt: sanitizedPrompt,
       };
     }
 
@@ -61,7 +89,7 @@ export async function generatePixelArt(prompt: string): Promise<PixelArtResponse
       return {
         imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Missing+Image+URL',
         message: 'API response did not include an image URL',
-        prompt,
+        prompt: sanitizedPrompt,
       };
     }
 
@@ -77,7 +105,7 @@ export async function generatePixelArt(prompt: string): Promise<PixelArtResponse
           return {
             imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Invalid+Image+Data',
             message: 'The image data received was invalid',
-            prompt,
+            prompt: sanitizedPrompt,
           };
         }
       }
@@ -86,7 +114,7 @@ export async function generatePixelArt(prompt: string): Promise<PixelArtResponse
     return {
       imageUrl: data.imageUrl,
       pixelArtAscii: data.pixelArtAscii || '',
-      prompt: data.prompt || prompt,
+      prompt: data.prompt || sanitizedPrompt,
       message: data.message,
       remainingCredits: data.remainingCredits,
     };
@@ -95,7 +123,7 @@ export async function generatePixelArt(prompt: string): Promise<PixelArtResponse
     return {
       imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Error',
       message: error instanceof Error ? error.message : 'Failed to generate pixel art',
-      prompt,
+      prompt: sanitizedPrompt,
     };
   }
 }
