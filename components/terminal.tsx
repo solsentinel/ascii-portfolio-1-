@@ -282,15 +282,15 @@ export const Terminal = () => {
       <div className="w-full max-w-4xl mx-auto h-full flex flex-col">
         <div 
           ref={terminalRef}
-          className="flex-1 bg-black/60 text-green-400 font-mono p-4 overflow-y-auto rounded-t-lg backdrop-blur-sm border border-white/10"
+          className="flex-1 bg-black/60 text-green-400 font-mono p-4 overflow-y-auto rounded-t-lg backdrop-blur-sm border border-white/10 pixel-effect pixel-border"
         >
           <AsciiLogo />
           
           <div className="mb-4">
-            <div className="text-white font-bold mb-1" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
+            <div className="text-white font-bold mb-1 pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
             {Object.entries(commands).map(([cmd, desc]) => (
               <div key={cmd} className="text-xs ml-2">
-                <span className="text-cyan-400 font-bold" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
+                <span className="text-cyan-400 font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
               </div>
             ))}
             <div className="text-xs mt-2 text-amber-300">
@@ -298,7 +298,7 @@ export const Terminal = () => {
             </div>
             
             {user && (
-              <div className="text-xs mt-2 text-emerald-400">
+              <div className="text-xs mt-2 text-emerald-400 pixel-effect">
                 Logged in as: {user.email}
               </div>
             )}
@@ -326,7 +326,7 @@ export const Terminal = () => {
           )}
           
           {imageUrl && !loading && (
-            <div className="mt-4 border border-white/20 p-3 bg-black/70 rounded">
+            <div className="mt-4 border border-white/20 p-3 bg-black/70 rounded pixel-effect pixel-border">
               <div className="text-xs text-gray-300 mb-2">Generated Image:</div>
               <div className="flex flex-col items-center">
                 {imageError ? (
@@ -336,7 +336,7 @@ export const Terminal = () => {
                     <img 
                       src={imageUrl} 
                       alt={`Pixel art for: ${prompt}`}
-                      className="w-full object-contain rounded"
+                      className="w-full object-contain rounded pixel-effect"
                       style={{ 
                         imageRendering: 'pixelated',
                         minHeight: '240px',
@@ -380,10 +380,10 @@ export const Terminal = () => {
 
           {/* Recent Generations Section */}
           {showRecent && recentGenerations.length > 0 && (
-            <div className="mt-6 border border-white/20 p-3 bg-black/70 rounded">
+            <div className="mt-6 border border-white/20 p-3 bg-black/70 rounded pixel-effect pixel-border">
               <div className="flex items-center gap-2 mb-3">
                 <History className="w-4 h-4 text-cyan-400" />
-                <div className="text-cyan-400 text-sm font-bold" style={{ fontFamily: "var(--font-pixel)" }}>Recent Generations:</div>
+                <div className="text-cyan-400 text-sm font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>Recent Generations:</div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {recentGenerations.map((gen, index) => (
@@ -419,7 +419,7 @@ export const Terminal = () => {
         
         <form 
           onSubmit={handleSubmit} 
-          className="flex bg-black/80 rounded-b-lg overflow-hidden border-x border-b border-white/10"
+          className="flex bg-black/80 rounded-b-lg overflow-hidden border-x border-b border-white/10 pixel-effect"
         >
           <span className="p-2 text-cyan-400 font-mono">$</span>
           <input
@@ -427,7 +427,7 @@ export const Terminal = () => {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 bg-transparent text-white font-mono p-2 focus:outline-none"
+            className="flex-1 bg-transparent text-white font-mono p-2 focus:outline-none pixel-effect"
             disabled={loading}
             placeholder={loading ? 'Processing...' : 'Type a command...'}
           />

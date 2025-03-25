@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import Terminal from "@/components/terminal"
 import BootSequence from "@/components/boot-sequence"
-import { CRTToggle } from "@/components/crt-toggle"
 import PixelGallery from "@/components/pixel-gallery"
 import Testimonials from "@/components/testimonials"
 
@@ -35,10 +34,6 @@ export default function Home() {
       
       {/* Overlay gradient */}
       <div className="fixed inset-0 bg-gradient-to-b from-transparent via-black/10 to-black/40 z-0" />
-
-      <div className="absolute top-4 right-4 z-50">
-        <CRTToggle />
-      </div>
 
       <div className="container mx-auto px-4 py-8 min-h-screen relative z-10">
         {booting ? <BootSequence /> : (
