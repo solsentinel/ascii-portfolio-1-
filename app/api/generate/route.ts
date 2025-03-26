@@ -195,69 +195,104 @@ export async function POST(request: NextRequest) {
     console.log(`Generation request from ${clientIp} - prompt length: ${sanitizedPrompt.length}`);
     
     // Create API request payload according to RetroFusion documentation
-    // RetroFusion expects very specific format - fix for 422 error
+    // Simplify the payload structure to solve 422 errors
     const payload = {
-      model: "RD_PIXEL_V2", // Use this specific model name for pixel art - was "RD_FLUX"
+      model: "RD_FLUX", // Try the original model name again
       width: 256,
       height: 256,
       prompt: sanitizedPrompt,
       num_images: 1,
-      // Optional parameters that help prevent 422 errors
-      params: {
-        cfg_scale: 7.5,
-        steps: 30,
-        prompt_strength: 0.8,
-        sampler: "ddim"
-      },
-      prompt_style: "pixel_art", // Specifically request pixel art style
-      seed: Math.floor(Math.random() * 1000000), // Random seed for variety
-      negative_prompt: "blurry, low quality, distorted" // Common negative prompts for better quality
+      // Remove nested params object that might be causing issues
+      cfg_scale: 7.5,
+      steps: 30,
+      sampler: "ddim"
     };
 
-    // Add detailed debug logging for 422 errors
-    console.log('Making API request to RetoDiffusion with payload structure:', {
-      model: payload.model,
-      width: payload.width,
-      height: payload.height,
-      promptLength: sanitizedPrompt.length,
-      hasParams: !!payload.params,
-      endpoint: apiEndpoint ? apiEndpoint.substring(0, 30) + '...' : 'undefined',
-      apiKeyFormat: cleanedApiKey.startsWith('rdpk-') ? 'Correct (rdpk-*)' : 'Missing prefix',
-      requestId
-    });
+    // Define headers with fallback options before diagnostic test
+    let mainRequestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${cleanedApiKey}`,
+      'Accept': 'application/json'
+    };
 
-    // Make API request to RetoDiffusion
+    // Make a diagnostic direct call to the API with minimal payload
+    // This will help identify exactly what format the API expects
+    console.log('Making diagnostic API call with minimal payload');
     try {
-      // Update headers with exact format from RetroFusion API docs
-      // Ensure API key matches expected format (rdpk-...)
-      const apiKeyHeader = cleanedApiKey.startsWith('rdpk-') ? cleanedApiKey : `rdpk-${cleanedApiKey}`;
-      
-      // Set proper headers for the API request
-      const response = await fetch(apiEndpoint, {
+      const diagnosticPayload = {
+        model: "RD_FLUX",
+        prompt: "test prompt",
+        width: 256,
+        height: 256,
+        num_images: 1
+      };
+
+      const diagnosticResponse = await fetch(apiEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RD-Token': apiKeyHeader, // Ensure proper format: rdpk-xxxx
-          'Accept': 'application/json',
-          'User-Agent': 'RetroFusion/1.0',
-          'X-Request-ID': requestId, // Pass through the request ID for tracing
-          'Cache-Control': 'no-cache'
-        },
-        body: JSON.stringify(payload)
+        headers: mainRequestHeaders,
+        body: JSON.stringify(diagnosticPayload)
       });
 
-      // Log complete request details for debugging
-      console.log('API request details:', {
-        endpoint: apiEndpoint,
-        method: 'POST',
-        headers: {
+      // Log the complete diagnostic response
+      console.log('Diagnostic API call result:', {
+        status: diagnosticResponse.status,
+        statusText: diagnosticResponse.statusText,
+        headers: Object.fromEntries(diagnosticResponse.headers.entries())
+      });
+
+      // Get and log the response text
+      const diagnosticText = await diagnosticResponse.text();
+      console.log('Diagnostic response text:', diagnosticText.substring(0, 500));
+      
+      // If we got a 401 error, try a different authorization method
+      if (diagnosticResponse.status === 401) {
+        console.log('Trying X-RD-Token header instead of Authorization');
+        const alternativeHeaders: Record<string, string> = {
           'Content-Type': 'application/json',
-          'X-RD-Token': apiKeyHeader.substring(0, 10) + '...',
-          'Accept': 'application/json',
-          'User-Agent': 'RetroFusion/1.0',
-          'X-Request-ID': requestId
-        },
-        body: payload
+          'X-RD-Token': cleanedApiKey.startsWith('rdpk-') ? cleanedApiKey : `rdpk-${cleanedApiKey}`,
+          'Accept': 'application/json'
+        };
+        
+        // Make a second diagnostic test with alternative headers
+        const altDiagnosticResponse = await fetch(apiEndpoint, {
+          method: 'POST',
+          headers: alternativeHeaders,
+          body: JSON.stringify(diagnosticPayload)
+        });
+        
+        console.log('Alternative authentication method result:', {
+          status: altDiagnosticResponse.status,
+          statusText: altDiagnosticResponse.statusText
+        });
+        
+        if (altDiagnosticResponse.ok) {
+          console.log('SUCCESS: X-RD-Token authentication worked! Using this format.');
+          // Use the working headers for the main request
+          mainRequestHeaders = alternativeHeaders;
+        }
+      }
+
+      if (diagnosticResponse.ok) {
+        console.log('SUCCESS: Diagnostic API call worked! Using this format for main request.');
+        // Update the payload to match the working diagnostic payload
+        Object.keys(payload).forEach(key => {
+          if (!(key in diagnosticPayload)) {
+            // @ts-ignore - Safely remove extra keys that aren't in the working payload
+            delete payload[key];
+          }
+        });
+      }
+    } catch (diagnosticError) {
+      console.error('Diagnostic API call failed:', diagnosticError);
+    }
+
+    // Make the actual API request
+    console.log('Making main API request with headers:', Object.keys(mainRequestHeaders));
+    try {
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: mainRequestHeaders,
+        body: JSON.stringify(payload)
       });
 
       // Improve error handling specifically for 422 errors
@@ -307,7 +342,7 @@ export async function POST(request: NextRequest) {
           const errorObj = e as Error;
           console.error('API error details:', {
             error: errorText.substring(0, 500), // Limit log size
-            apiKeyFirstFiveChars: apiKeyHeader.substring(0, 5) // Log first 5 chars for debugging
+            apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
           });
         }
       }
