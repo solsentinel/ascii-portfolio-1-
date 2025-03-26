@@ -11,7 +11,7 @@ export function AsciiLogo() {
           fontFamily: 'var(--font-pixel), monospace',
           letterSpacing: '0.1em',
           textShadow: '0 0 5px rgba(0, 255, 0, 0.7), 0 0 10px rgba(0, 255, 0, 0.5)',
-          fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
+          fontSize: 'clamp(2rem, 5vw, 3.5rem)',
           lineHeight: '1.2',
           padding: '1rem',
           backgroundColor: 'rgba(0, 0, 0, 0.7)',

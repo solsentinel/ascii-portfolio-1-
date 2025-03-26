@@ -288,18 +288,18 @@ export const Terminal = () => {
           <AsciiLogo />
           
           <div className="mb-4">
-            <div className="text-white font-bold mb-1 pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
+            <div className="text-white font-bold mb-1 pixel-effect text-lg" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
             {Object.entries(commands).map(([cmd, desc]) => (
-              <div key={cmd} className="text-xs ml-2">
-                <span className="text-cyan-400 font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
-      </div>
+              <div key={cmd} className="text-sm ml-2 my-1">
+                <span className="text-cyan-400 font-bold pixel-effect text-base" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
+              </div>
             ))}
-            <div className="text-xs mt-2 text-amber-300">
+            <div className="text-sm mt-2 text-amber-300">
               Note: Limited to 10 image generations per hour.
             </div>
             
             {user && (
-              <div className="text-xs mt-2 text-emerald-400 pixel-effect">
+              <div className="text-sm mt-2 text-emerald-400 pixel-effect">
                 Logged in as: {user.email}
               </div>
             )}
@@ -311,7 +311,7 @@ export const Terminal = () => {
               className={`whitespace-pre-wrap mb-2 ${
                 entry.type === 'error' ? 'text-rose-400' : 
                 entry.type === 'input' ? 'text-cyan-400' : 'text-emerald-300'
-              } ${entry.type === 'input' ? 'font-mono' : ''}`}
+              } ${entry.type === 'input' ? 'font-mono' : ''} text-base leading-relaxed`}
               style={{ 
                 fontFamily: entry.type === 'input' ? 'var(--font-mono, monospace)' : 'var(--font-pixel)'
               }}
@@ -321,7 +321,7 @@ export const Terminal = () => {
           ))}
           
           {loading && (
-            <div className="text-amber-300 animate-pulse" style={{ fontFamily: "var(--font-pixel)" }}>
+            <div className="text-amber-300 animate-pulse text-base" style={{ fontFamily: "var(--font-pixel)" }}>
               Processing...
             </div>
           )}
@@ -411,24 +411,24 @@ export const Terminal = () => {
                         </button>
                       </div>
                     </div>
-          </div>
-        ))}
+                  </div>
+                ))}
               </div>
             </div>
           )}
-      </div>
+        </div>
 
         <form 
           onSubmit={handleSubmit} 
           className="flex bg-black/80 rounded-b-lg overflow-hidden border-x border-b border-white/10 pixel-effect"
         >
-          <span className="p-2 text-cyan-400 font-mono">$</span>
+          <span className="p-2 text-cyan-400 font-mono text-lg">$</span>
           <input
             ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 bg-transparent text-white font-mono p-2 focus:outline-none pixel-effect"
+            className="flex-1 bg-transparent text-white font-mono p-2 focus:outline-none pixel-effect text-lg"
             disabled={loading}
             placeholder={loading ? 'Processing...' : 'Type a command...'}
           />

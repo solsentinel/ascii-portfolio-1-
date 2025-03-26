@@ -88,11 +88,20 @@ export default function PixelGallery() {
 
   return (
     <div className="w-full max-w-6xl mx-auto mt-8 rounded-lg overflow-hidden border border-white/10">
-      <div className="bg-black/60 p-3 backdrop-blur-sm border-b border-white/10">
-        <h2 style={{ fontFamily: "var(--font-pixel)" }} className="text-cyan-400 text-lg">Gallery</h2>
-        <p className="text-gray-300 text-xs" style={{ fontFamily: "var(--font-pixel)" }}>
-          Featured pixel art creations
-        </p>
+      <div className="w-full max-w-6xl mx-auto p-4">
+        <div className="mb-8">
+          <div className="bg-black/60 p-3 backdrop-blur-sm border-b border-white/10">
+            <h2 
+              className="text-2xl md:text-3xl lg:text-4xl font-bold text-white text-center pixel-effect"
+              style={{ fontFamily: "var(--font-pixel)" }}
+            >
+              Gallery
+            </h2>
+            <p className="text-gray-300 text-center text-sm md:text-base mt-2 pixel-effect">
+              Featured pixel art creations
+            </p>
+          </div>
+        </div>
       </div>
       
       <div className="bg-black/70 p-4">
@@ -119,20 +128,20 @@ export default function PixelGallery() {
                 />
               </div>
               <div className="p-2">
-                <h3 className="text-cyan-300 text-sm font-medium truncate" style={{ fontFamily: "var(--font-pixel)" }}>
+                <h3 className="text-cyan-300 text-base md:text-lg font-medium truncate" style={{ fontFamily: "var(--font-pixel)" }}>
                   {item.name}
                 </h3>
                 {item.description && (
-                  <p className="text-gray-400 text-xs mt-1 line-clamp-2">{item.description}</p>
+                  <p className="text-gray-400 text-sm mt-1 line-clamp-2">{item.description}</p>
                 )}
                 <div className="flex justify-between items-center mt-2">
                   <button 
-                    className="text-xs bg-black/50 text-white px-2 py-1 rounded hover:bg-black/80 transition-colors font-mono border border-cyan-900/30 hover:border-cyan-400/30"
+                    className="text-sm bg-black/50 text-white px-2 py-1 rounded hover:bg-black/80 transition-colors font-mono border border-cyan-900/30 hover:border-cyan-400/30"
                     onClick={() => window.open(item.imageUrl, '_blank')}
                   >
                     View
                   </button>
-                  <span className="text-gray-400 text-xs font-mono">256×256</span>
+                  <span className="text-gray-400 text-sm font-mono">256×256</span>
                 </div>
               </div>
             </div>
