@@ -6,6 +6,7 @@ import Terminal from '@/components/terminal';
 import BootSequence from '@/components/boot-sequence';
 import PixelGallery from '@/components/pixel-gallery';
 import Testimonials from '@/components/testimonials';
+import CrtToggle from '@/components/crt-toggle';
 
 function ErrorFallback({ error, resetErrorBoundary }: { error: Error, resetErrorBoundary: () => void }) {
   return (
@@ -55,11 +56,32 @@ export default function Home() {
     if (!booting && !error) {
       try {
         setContent(
-          <main className="flex min-h-screen flex-col items-center justify-between p-5 md:p-12">
-            <Terminal />
-            <div className="w-full max-w-6xl mx-auto mt-12 space-y-16">
-              <PixelGallery />
-              <Testimonials />
+          <main className="min-h-screen bg-black relative overflow-hidden">
+            {/* Background Image */}
+            <div
+              className="fixed inset-0 bg-cover bg-center bg-no-repeat z-0"
+              style={{
+                backgroundImage:
+                  'url("https://ideogram.ai/assets/image/lossless/response/sovtfre8Qi6iHyHJ0ZGreg")',
+                backgroundPosition: "center center",
+                backgroundSize: "cover",
+                filter: "contrast(1.05) brightness(0.9)",
+              }}
+              aria-hidden="true"
+            />
+            
+            {/* Overlay gradient */}
+            <div className="fixed inset-0 bg-gradient-to-b from-transparent via-black/10 to-black/40 z-0" />
+            
+            <CrtToggle />
+
+            <div className="container mx-auto px-4 py-8 min-h-screen relative z-10">
+              <Terminal />
+              <div className="w-full max-w-6xl mx-auto mt-12 space-y-16">
+                <PixelGallery />
+                <Testimonials />
+                <div className="pb-10" />
+              </div>
             </div>
           </main>
         );

@@ -28,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className="dark">
+    <html lang="en" suppressHydrationWarning className="dark crt">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <script
@@ -63,12 +63,15 @@ export default function RootLayout({
           `}
         </style>
       </head>
-      <body className={`${inter.variable} ${pixelFont.variable}`}>
+      <body 
+        className={`${inter.variable} ${pixelFont.variable} min-h-screen`}
+      >
         <ThemeProvider
           attribute="class"
-          defaultTheme="light"
-          enableSystem={true}
+          defaultTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
+          forcedTheme="dark"
         >
           {children}
         </ThemeProvider>
