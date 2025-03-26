@@ -11,6 +11,7 @@ import CrtToggle from '@/components/crt-toggle';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import AuthModal from '@/components/auth-modal';
 import type { User } from "@supabase/supabase-js";
+import PixelGenerator from '@/components/pixel-generator';
 
 function ErrorFallback({ error, resetErrorBoundary }: { error: Error, resetErrorBoundary: () => void }) {
   return (
@@ -129,7 +130,14 @@ export default function Home() {
 
             <div className="container mx-auto px-4 py-8 min-h-screen relative z-10">
               {user ? (
-                <Terminal />
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="w-full md:w-1/2">
+                    <Terminal />
+                  </div>
+                  <div className="w-full md:w-1/2 mt-6 md:mt-0">
+                    <PixelGenerator />
+                  </div>
+                </div>
               ) : (
                 <div className="w-full max-w-4xl mx-auto h-64 flex items-center justify-center">
                   <div className="text-center p-6 bg-black/80 rounded-lg border border-white/10 pixel-effect pixel-border">
