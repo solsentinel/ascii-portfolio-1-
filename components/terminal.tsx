@@ -386,10 +386,10 @@ export const Terminal = () => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Add mobile detection
+  // Add mobile detection but only use for click handling
   const [isMobile, setIsMobile] = useState<boolean>(false);
 
-  // Check if the user is on a mobile device
+  // We'll use responsive CSS classes instead of conditional rendering
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -490,55 +490,53 @@ export const Terminal = () => {
       <div className="w-full max-w-4xl mx-auto h-full flex flex-col">
         <div 
           ref={terminalRef}
-          className="flex-1 bg-black/60 text-green-400 font-mono p-6 overflow-y-auto rounded-t-lg backdrop-blur-sm border border-white/10 pixel-effect pixel-border"
+          className="flex-1 bg-black/60 text-green-400 font-mono p-3 sm:p-6 overflow-y-auto rounded-t-lg backdrop-blur-sm border border-white/10 pixel-effect pixel-border"
           onClick={handleTerminalClick}
         >
           <AsciiLogo />
           
-          <div className="mb-6">
-            <div className="text-white font-bold mb-3 pixel-effect text-2xl" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
+          <div className="mb-4 sm:mb-6">
+            <div className="text-white font-bold mb-3 pixel-effect text-xl sm:text-2xl" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
             {Object.entries(commands).map(([cmd, desc]) => (
-              <div key={cmd} className="text-lg ml-4 my-2">
+              <div key={cmd} className="text-base sm:text-lg ml-2 sm:ml-4 my-1 sm:my-2">
                 <span 
-                  className="text-cyan-400 font-bold pixel-effect text-xl cursor-pointer hover:underline"
+                  className="text-cyan-400 font-bold pixel-effect text-lg sm:text-xl cursor-pointer hover:underline"
                   style={{ fontFamily: "var(--font-pixel)" }}
                   onClick={() => executeCommand(cmd)}
                 >{cmd}</span> - <span className="text-gray-300">{desc}</span>
-      </div>
+              </div>
             ))}
-            <div className="text-lg mt-4 text-amber-300">
+            <div className="text-base sm:text-lg mt-4 text-amber-300">
               Note: Limited to 1 image generation per user. This limit helps us provide high-quality images to everyone.
             </div>
             
             {user && (
-              <div className="text-lg mt-3 text-emerald-400 pixel-effect">
+              <div className="text-base sm:text-lg mt-3 text-emerald-400 pixel-effect break-all">
                 Logged in as: {user.email}
               </div>
             )}
           </div>
 
-          {/* Mobile Quick Command Buttons */}
-          {isMobile && (
-            <div className="flex flex-wrap gap-2 mb-6">
-              {Object.keys(commands).map(cmd => (
-                <button
-                  key={cmd}
-                  onClick={() => executeCommand(cmd)}
-                  className="bg-black/70 px-3 py-2 rounded-md border border-cyan-500/30 text-cyan-400 text-sm"
-                >
-                  {cmd}
-                </button>
-        ))}
-      </div>
-          )}
+          {/* Command Buttons - Visible on small screens, hidden on larger */}
+          <div className="flex flex-wrap gap-2 mb-4 sm:mb-6 md:hidden">
+            {Object.keys(commands).map(cmd => (
+              <button
+                key={cmd}
+                onClick={() => executeCommand(cmd)}
+                className="bg-black/70 px-3 py-2 rounded-md border border-cyan-500/30 text-cyan-400 text-sm"
+              >
+                {cmd}
+              </button>
+            ))}
+          </div>
           
           {history.map((entry, i) => (
             <div 
               key={i} 
-              className={`whitespace-pre-wrap mb-3 ${
+              className={`whitespace-pre-wrap mb-2 sm:mb-3 ${
                 entry.type === 'error' ? 'text-rose-400' : 
                 entry.type === 'input' ? 'text-cyan-400' : 'text-emerald-300'
-              } ${entry.type === 'input' ? 'font-mono' : ''} text-xl leading-relaxed`}
+              } ${entry.type === 'input' ? 'font-mono' : ''} text-base sm:text-xl leading-relaxed`}
               style={{ 
                 fontFamily: entry.type === 'input' ? 'var(--font-mono, monospace)' : 'var(--font-pixel)'
               }}
@@ -548,20 +546,21 @@ export const Terminal = () => {
           ))}
           
           {loading && (
-            <div className="text-amber-300 animate-pulse text-xl my-3" style={{ fontFamily: "var(--font-pixel)" }}>
+            <div className="text-amber-300 animate-pulse text-lg sm:text-xl my-3" style={{ fontFamily: "var(--font-pixel)" }}>
               Processing...
             </div>
           )}
           
           {imageUrl && !loading && (
-            <div className="mt-6 border border-white/20 bg-black/70 rounded pixel-effect pixel-border w-full">
-              <div className="text-base text-gray-300 p-3 border-b border-white/10">Generated Image:</div>
-              <div className="flex flex-col items-center w-full p-4">
+            <div className="mt-4 sm:mt-6 border border-white/20 bg-black/70 rounded pixel-effect pixel-border w-full">
+              <div className="text-sm sm:text-base text-gray-300 p-2 sm:p-3 border-b border-white/10">Generated Image:</div>
+
+              <div className="flex flex-col items-center w-full p-2 sm:p-4">
                 {imageError ? (
-                  <div className="flex items-center justify-center text-rose-400 text-lg h-48">{imageError}</div>
+                  <div className="flex items-center justify-center text-rose-400 text-base sm:text-lg h-48">{imageError}</div>
                 ) : (
                   <div className="w-full max-w-2xl mx-auto">
-                    <div className="aspect-square relative overflow-hidden rounded-md" 
+                    <div className="aspect-square relative overflow-hidden rounded-md"
                       style={{
                         border: '2px solid rgba(0, 255, 255, 0.2)',
                         boxShadow: '0 0 10px rgba(0, 255, 255, 0.1)'
@@ -584,15 +583,15 @@ export const Terminal = () => {
                 )}
                 
                 {!imageError && isValidBase64Image(imageUrl) && !imageUrl.includes('text=Credit+Limit+Reached') && (
-                  <div className="flex justify-center space-x-4 mt-4 w-full">
+                  <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mt-3 sm:mt-4 w-full">
                     <button 
                       onClick={handleDownload}
                       className="bg-black/70 hover:bg-black/90 p-2 rounded text-white border border-white/20 flex items-center gap-2"
                       title="Download image"
                       disabled={loading}
                     >
-                      <Download className="w-5 h-5" />
-                      <span className="text-base font-mono">Download</span>
+                      <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="text-sm sm:text-base font-mono">Download</span>
                     </button>
                     <button 
                       onClick={handleOpenImage}
@@ -600,13 +599,13 @@ export const Terminal = () => {
                       title="Open in new tab"
                       disabled={loading}
                     >
-                      <ExternalLink className="w-5 h-5" />
-                      <span className="text-base font-mono">View Full</span>
+                      <ExternalLink className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="text-sm sm:text-base font-mono">View Full</span>
                     </button>
                   </div>
                 )}
                 
-                <div className="text-base text-amber-300 mt-3 text-center w-full">
+                <div className="text-sm sm:text-base text-amber-300 mt-3 text-center w-full">
                   Don't forget to save your pixel art!
                 </div>
               </div>
@@ -615,12 +614,12 @@ export const Terminal = () => {
 
           {/* Recent Generations Section */}
           {showRecent && recentGenerations.length > 0 && (
-            <div className="mt-8 border border-white/20 p-5 bg-black/70 rounded pixel-effect pixel-border">
-              <div className="flex items-center gap-3 mb-4">
-                <History className="w-6 h-6 text-cyan-400" />
-                <div className="text-cyan-400 text-lg font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>Recent Generations:</div>
+            <div className="mt-6 sm:mt-8 border border-white/20 p-3 sm:p-5 bg-black/70 rounded pixel-effect pixel-border">
+              <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <History className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-400" />
+                <div className="text-cyan-400 text-base sm:text-lg font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>Recent Generations:</div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {recentGenerations.map((gen, index) => (
                   <div key={index} className="border border-white/10 bg-black/50 rounded-md overflow-hidden">
                     <div className="aspect-square relative">
@@ -631,15 +630,15 @@ export const Terminal = () => {
                         style={{ imageRendering: 'pixelated' }}
                       />
                     </div>
-                    <div className="p-3">
-                      <div className="text-sm text-cyan-200 truncate" title={gen.prompt}>
+                    <div className="p-2 sm:p-3">
+                      <div className="text-xs sm:text-sm text-cyan-200 truncate" title={gen.prompt}>
                         {gen.prompt}
                       </div>
-                      <div className="flex justify-between items-center mt-2">
-                        <span className="text-gray-400 text-sm">{formatTimestamp(gen.timestamp)}</span>
+                      <div className="flex justify-between items-center mt-1 sm:mt-2">
+                        <span className="text-gray-400 text-xs sm:text-sm">{formatTimestamp(gen.timestamp)}</span>
                         <button 
                           onClick={() => window.open(gen.imageUrl, '_blank')}
-                          className="text-sm bg-black/70 hover:bg-black/90 px-3 py-1 rounded text-white"
+                          className="text-xs sm:text-sm bg-black/70 hover:bg-black/90 px-2 sm:px-3 py-1 rounded text-white"
                         >
                           View
                         </button>
@@ -652,36 +651,33 @@ export const Terminal = () => {
           )}
         </div>
 
-        {/* Input bar with mobile optimizations */}
+        {/* Input bar with responsive design */}
         <form 
           onSubmit={(e) => {
             e.preventDefault();
             handleSubmit(e);
-            if (isMobile) {
-              // This slight delay helps with mobile keyboard issues
-              setTimeout(() => focusInput(), 50);
-            }
+            setTimeout(() => focusInput(), 50);
           }}
           className="flex bg-black/80 rounded-b-lg overflow-hidden border-x border-b border-white/10 pixel-effect"
         >
-          <span className="p-3 text-cyan-400 font-mono text-2xl flex items-center">$</span>
+          <span className="p-2 sm:p-3 text-cyan-400 font-mono text-xl sm:text-2xl flex items-center">$</span>
           <input
             ref={inputRef}
             type="text"
-            inputMode={isMobile ? "text" : undefined}
+            inputMode="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 bg-transparent text-white font-mono p-3 focus:outline-none pixel-effect text-2xl"
+            className="flex-1 bg-transparent text-white font-mono p-2 sm:p-3 focus:outline-none pixel-effect text-lg sm:text-2xl"
             disabled={loading}
-            placeholder={loading ? 'Processing...' : isMobile ? 'Tap to type...' : 'Type a command...'}
+            placeholder={loading ? 'Processing...' : 'Type a command...'}
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
           />
-          {isMobile && input && (
+          {input && (
             <button
               type="submit"
-              className="px-4 bg-cyan-600 text-white font-bold"
+              className="px-3 sm:px-4 bg-cyan-600 text-white font-bold"
               onClick={(e) => {
                 e.preventDefault();
                 handleSubmit(e);
@@ -692,26 +688,26 @@ export const Terminal = () => {
           )}
         </form>
         
-        {/* Command Suggestions - Mobile Optimized */}
+        {/* Command Suggestions */}
         {suggestions.length > 0 && (
-          <div className="bg-black/90 border border-white/10 rounded-md shadow-lg mt-1 overflow-hidden max-h-60 overflow-y-auto">
+          <div className="bg-black/90 border border-white/10 rounded-md shadow-lg mt-1 overflow-hidden max-h-48 sm:max-h-60 overflow-y-auto">
             {suggestions.map((suggestion, index) => (
               <div 
                 key={suggestion}
-                className={`px-3 py-2 font-mono text-base ${
+                className={`px-2 sm:px-3 py-2 sm:py-2 font-mono text-sm sm:text-base ${
                   index === selectedSuggestion 
                     ? 'bg-cyan-500/20 text-white' 
                     : 'text-gray-300 hover:bg-black/60'
-                } ${isMobile ? 'py-4 text-lg' : ''}`}
-          onClick={() => {
+                }`}
+                onClick={() => {
                   if (suggestion === 'generate' && input.trim() !== 'generate') {
                     setInput('generate ');
                   } else {
                     setInput(suggestion);
                   }
                   
-                  // On mobile, complete and execute if it's a simple command
-                  if (isMobile && suggestion !== 'generate') {
+                  // Execute immediately if it's a simple command
+                  if (suggestion !== 'generate') {
                     executeCommand(suggestion);
                   } else {
                     inputRef.current?.focus();
@@ -723,7 +719,7 @@ export const Terminal = () => {
             ))}
           </div>
         )}
-    </div>
+      </div>
     </>
   );
 };
