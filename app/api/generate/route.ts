@@ -1,15 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Maximum prompt length for security
+const MAX_PROMPT_LENGTH = 1000;
+
+// Validate that the input is safe and meets requirements
+function validateRequest(prompt: string): { valid: boolean; error?: string } {
+  if (!prompt) {
+    return { valid: false, error: 'Missing prompt' };
+  }
+  
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    return { valid: false, error: 'Prompt exceeds maximum allowed length' };
+  }
+  
+  // Check for potential XSS or command injection patterns
+  const suspiciousPatterns = [
+    /<script/i,
+    /javascript:/i,
+    /onerror=/i,
+    /onload=/i,
+    /eval\(/i,
+    /document\.cookie/i,
+    /\$\{/i  // Template injection attempt
+  ];
+  
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(prompt)) {
+      return { 
+        valid: false, 
+        error: 'Prompt contains potentially malicious content' 
+      };
+    }
+  }
+  
+  return { valid: true };
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { prompt } = await request.json();
+    // Validate request origin (simple CORS check)
+    const origin = request.headers.get('origin') || '';
+    const allowedOrigins = [
+      'https://your-domain.com',  // Replace with your actual domain
+      'https://www.your-domain.com',
+      process.env.NEXT_PUBLIC_SITE_URL || '',
+      'http://localhost:3000'  // For local development
+    ];
     
-    if (!prompt || prompt.trim() === '') {
+    const isAllowedOrigin = !origin || allowedOrigins.some(allowed => 
+      origin === allowed || allowed === '*'
+    );
+    
+    if (!isAllowedOrigin) {
+      console.warn(`Blocked request from unauthorized origin: ${origin}`);
       return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Please provide a prompt to generate an image' 
-        }, 
+        { success: false, message: 'Unauthorized' },
+        { status: 403 }
+      );
+    }
+
+    // Get client IP for logging/security
+    const clientIp = request.headers.get('x-forwarded-for') || 
+                    request.headers.get('x-real-ip') || 
+                    'unknown';
+    
+    // Parse request with proper error handling
+    let requestData;
+    try {
+      requestData = await request.json();
+    } catch (err) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid request format' },
+        { status: 400 }
+      );
+    }
+    
+    const { prompt } = requestData;
+    
+    // Validate prompt
+    const validation = validateRequest(prompt);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { success: false, message: validation.error },
         { status: 400 }
       );
     }
@@ -32,18 +104,21 @@ export async function POST(request: NextRequest) {
     // Clean and validate the API key
     const cleanedApiKey = cleanApiKey(apiKey);
     
-    // Log environment check (for debugging)
-    console.log('Environment check:', {
-      hasApiKey: !!cleanedApiKey,
-      apiEndpoint,
-      keyLength: cleanedApiKey?.length,
-      apiKeyFormat: cleanedApiKey?.startsWith('rdpk-') ? 'valid format' : 'invalid format'
-    });
+    // Log environment check (for debugging) - avoid logging full key details in production
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Environment check:', {
+        hasApiKey: !!cleanedApiKey,
+        apiEndpoint,
+        keyLength: cleanedApiKey?.length,
+        apiKeyFormat: cleanedApiKey?.startsWith('rdpk-') ? 'valid format' : 'invalid format'
+      });
+    }
 
     // Sanitize prompt (basic sanitization)
     const sanitizedPrompt = sanitizePrompt(prompt);
     
-    console.log('Generating with prompt:', sanitizedPrompt);
+    // Log generation attempt with client IP (avoid logging full prompts in production)
+    console.log(`Generation request from ${clientIp} - prompt length: ${sanitizedPrompt.length}`);
     
     // Create API request payload according to documentation
     const payload = {
@@ -57,17 +132,15 @@ export async function POST(request: NextRequest) {
       seed: Math.floor(Math.random() * 1000000) // Random seed for variety
     };
 
-    // Log the request details (excluding sensitive data)
-    console.log('Making API request to:', apiEndpoint);
-    console.log('Request payload:', { ...payload, apiKeyPresent: !!cleanedApiKey });
-    
     // Make API request to RetoDiffusion
     const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-RD-Token': cleanedApiKey, // Using cleaned API key
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': 'Promixel/1.0',
+        'X-Request-ID': crypto.randomUUID() // Add request ID for tracing
       },
       body: JSON.stringify(payload)
     });
@@ -75,13 +148,19 @@ export async function POST(request: NextRequest) {
     // Handle API response errors
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API error details:', {
+      console.error('API error:', {
         status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries()),
-        error: errorText,
-        apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
+        message: response.statusText,
+        clientIp
       });
+      
+      // Only log detailed error info in non-production environments
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('API error details:', {
+          error: errorText,
+          apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
+        });
+      }
       
       // Handle specific error cases
       if (response.status === 429) {
@@ -107,23 +186,25 @@ export async function POST(request: NextRequest) {
       
       return NextResponse.json({ 
         success: false, 
-        message: `API error: ${response.status} - ${errorText || response.statusText}` 
+        message: `API error: ${response.status}` // Don't expose detailed error info to clients
       }, { status: response.status });
     }
 
     // Parse the response
-    const data = await response.json();
-    
-    // Log successful response structure (excluding sensitive data)
-    console.log('API response structure:', {
-      hasBase64Images: !!data?.base64_images,
-      imageCount: data?.base64_images?.length,
-      remainingCredits: data?.remaining_credits
-    });
+    let data;
+    try {
+      data = await response.json();
+    } catch (err) {
+      console.error('Failed to parse API response:', err);
+      return NextResponse.json({ 
+        success: false, 
+        message: 'Invalid response from the API' 
+      }, { status: 500 });
+    }
     
     // Validate response data
     if (!data || !data.base64_images || !data.base64_images[0]) {
-      console.error('Invalid API response structure:', data);
+      console.error('Invalid API response structure');
       return NextResponse.json({ 
         success: false, 
         message: 'Invalid response from the API' 
@@ -131,18 +212,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Return the image data with success
-    return NextResponse.json({
+    const response_data = {
       success: true,
       imageUrl: `data:image/png;base64,${data.base64_images[0]}`,
       prompt: sanitizedPrompt,
       remainingCredits: data.remaining_credits
-    });
+    };
+
+    const finalResponse = NextResponse.json(response_data);
+    
+    // Add security headers
+    finalResponse.headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; script-src 'self'");
+    finalResponse.headers.set('X-Content-Type-Options', 'nosniff');
+    finalResponse.headers.set('X-Frame-Options', 'DENY');
+    finalResponse.headers.set('X-XSS-Protection', '1; mode=block');
+    finalResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    
+    return finalResponse;
   } catch (error) {
     console.error('Error generating pixel art:', error);
     
+    // Don't expose error details to clients
     return NextResponse.json({ 
       success: false, 
-      message: error instanceof Error ? error.message : 'An unknown error occurred'
+      message: 'An error occurred while processing your request'
     }, { status: 500 });
   }
 }
@@ -155,11 +249,14 @@ export async function POST(request: NextRequest) {
 function sanitizePrompt(prompt: string): string {
   if (!prompt) return '';
   
-  // Remove any HTML tags
-  let sanitized = prompt.replace(/<[^>]*>/g, '');
+  // Remove any potentially dangerous HTML/script tags
+  let sanitized = prompt.replace(/<[^>]*>|javascript:|onerror=|onload=/gi, '');
+  
+  // Prevent SQL injection attempts
+  sanitized = sanitized.replace(/['";`]/g, '');
   
   // Limit length
-  return sanitized.trim().substring(0, 1000);
+  return sanitized.trim().substring(0, MAX_PROMPT_LENGTH);
 }
 
 /**
