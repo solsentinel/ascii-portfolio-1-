@@ -29,11 +29,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Clean and validate the API key
+    const cleanedApiKey = cleanApiKey(apiKey);
+    
     // Log environment check (for debugging)
     console.log('Environment check:', {
-      hasApiKey: !!apiKey,
+      hasApiKey: !!cleanedApiKey,
       apiEndpoint,
-      keyLength: apiKey?.length
+      keyLength: cleanedApiKey?.length,
+      apiKeyFormat: cleanedApiKey?.startsWith('rdpk-') ? 'valid format' : 'invalid format'
     });
 
     // Sanitize prompt (basic sanitization)
@@ -55,14 +59,14 @@ export async function POST(request: NextRequest) {
 
     // Log the request details (excluding sensitive data)
     console.log('Making API request to:', apiEndpoint);
-    console.log('Request payload:', { ...payload, apiKeyPresent: !!apiKey });
+    console.log('Request payload:', { ...payload, apiKeyPresent: !!cleanedApiKey });
     
     // Make API request to RetoDiffusion
     const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-RD-Token': apiKey, // Changed to X-RD-Token as per documentation
+        'X-RD-Token': cleanedApiKey, // Using cleaned API key
         'Accept': 'application/json'
       },
       body: JSON.stringify(payload)
@@ -75,7 +79,8 @@ export async function POST(request: NextRequest) {
         status: response.status,
         statusText: response.statusText,
         headers: Object.fromEntries(response.headers.entries()),
-        error: errorText
+        error: errorText,
+        apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
       });
       
       // Handle specific error cases
@@ -155,4 +160,23 @@ function sanitizePrompt(prompt: string): string {
   
   // Limit length
   return sanitized.trim().substring(0, 1000);
+}
+
+/**
+ * Clean and validate the API key format
+ * @param apiKey The API key to clean
+ * @returns A cleaned version of the API key
+ */
+function cleanApiKey(apiKey: string): string {
+  if (!apiKey) return '';
+  
+  // Remove any whitespace
+  let cleaned = apiKey.trim();
+  
+  // Ensure it has the correct prefix
+  if (!cleaned.startsWith('rdpk-') && cleaned.includes('rdpk-')) {
+    cleaned = 'rdpk-' + cleaned.split('rdpk-')[1];
+  }
+  
+  return cleaned;
 } 

@@ -1,13 +1,34 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 
-export default function AuthForm() {
+interface AuthFormProps {
+  onAuthSuccess?: () => void;
+}
+
+export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const supabase = createClientComponentClient()
   const [showAuth, setShowAuth] = useState(true)
+
+  // Listen for auth state changes to close the modal
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event)
+      
+      // Close modal on successful sign in or sign up
+      if ((event === 'SIGNED_IN' || event === 'USER_UPDATED') && session?.user) {
+        console.log('User logged in:', session.user.email)
+        onAuthSuccess && onAuthSuccess()
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase, onAuthSuccess])
 
   return (
     <div className="w-full max-w-md mx-auto p-6 bg-black/70 backdrop-blur-sm rounded-lg border border-white/10">

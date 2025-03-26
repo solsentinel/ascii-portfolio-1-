@@ -504,7 +504,7 @@ export const Terminal = () => {
                   style={{ fontFamily: "var(--font-pixel)" }}
                   onClick={() => executeCommand(cmd)}
                 >{cmd}</span> - <span className="text-gray-300">{desc}</span>
-              </div>
+      </div>
             ))}
             <div className="text-lg mt-4 text-amber-300">
               Note: Limited to 1 image generation per user. This limit helps us provide high-quality images to everyone.
@@ -528,8 +528,8 @@ export const Terminal = () => {
                 >
                   {cmd}
                 </button>
-              ))}
-            </div>
+        ))}
+      </div>
           )}
           
           {history.map((entry, i) => (
@@ -703,7 +703,7 @@ export const Terminal = () => {
                     ? 'bg-cyan-500/20 text-white' 
                     : 'text-gray-300 hover:bg-black/60'
                 } ${isMobile ? 'py-4 text-lg' : ''}`}
-                onClick={() => {
+          onClick={() => {
                   if (suggestion === 'generate' && input.trim() !== 'generate') {
                     setInput('generate ');
                   } else {
@@ -723,7 +723,7 @@ export const Terminal = () => {
             ))}
           </div>
         )}
-      </div>
+    </div>
     </>
   );
 };

@@ -27,7 +27,7 @@ export default function AuthModal({ show, onClose }: AuthModalProps) {
         >
           ✕
         </button>
-        <AuthForm />
+        <AuthForm onAuthSuccess={onClose} />
       </div>
     </div>
   )
