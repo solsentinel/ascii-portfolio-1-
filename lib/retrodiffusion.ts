@@ -1,6 +1,7 @@
 /**
  * Retro Diffusion API Client
  * Functions for generating and downloading pixel art
+ * Uses a secure server-side API route to protect API keys
  */
 
 // Types
@@ -14,7 +15,7 @@ export interface GenerationResult {
 }
 
 /**
- * Generate pixel art using the Retro Diffusion API
+ * Generate pixel art using a secure server API route
  * @param prompt Text prompt to generate pixel art from
  * @returns Object containing the image URL and any messages
  */
@@ -28,105 +29,36 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
       };
     }
 
-    // Sanitize the prompt
-    const sanitizedPrompt = sanitizePrompt(prompt);
-
-    // Check for API key and endpoint
-    const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY;
-    const apiEndpoint = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_ENDPOINT || 'https://api.retrodiffusion.ai/v1/inferences';
+    console.log('Generating pixel art with prompt:', prompt);
     
-    console.log('Debug - Environment variables:', { 
-      hasApiKey: !!apiKey, 
-      keyLength: apiKey?.length || 0,
-      apiEndpoint 
-    });
-
-    if (!apiKey) {
-      console.error('Missing API key for Retro Diffusion');
-      return {
-        imageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUAAACnej3aAAAAAXRSTlMAQObYZgAAADJJREFUaN7twTEBAAAAwiD7p14MH2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4N8AKvgAAUFrhu4AAAAASUVORK5CYII=',
-        message: 'API key not configured. Using placeholder image.',
-        success: false,
-        prompt: sanitizedPrompt
-      };
-    }
-
-    console.log('Generating with prompt:', sanitizedPrompt);
-    
-    // Create API request payload according to latest documentation
-    const payload = {
-      model: "RD_FLUX", // RD_CLASSIC is no longer supported
-      width: 256,
-      height: 256,
-      prompt: sanitizedPrompt,
-      num_images: 1,
-      prompt_style: "default" // Optional style parameter
-    };
-    
-    console.log('Sending request with payload:', JSON.stringify(payload));
-    
-    // Make API request
-    const response = await fetch(apiEndpoint, {
+    // Call our secure API route instead of the RetoDiffusion API directly
+    const response = await fetch('/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-RD-Token': apiKey
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({ prompt })
     });
+
+    // Parse the API response
+    const result = await response.json();
     
-    // Handle API response
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      
-      if (response.status === 429) {
-        return {
-          imageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEX/AAAZ4gk3AAAAXklEQVR42u3BMQEAAADCIPunNsU+YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+A0mCAABQ2/jwwAAAABJRU5ErkJggg==',
-          message: 'Credit limit reached. Try again later or upgrade your plan.',
-          success: false,
-          prompt: sanitizedPrompt
-        };
-      }
-      
-      console.error('API error:', response.status, errorText);
-      throw new Error(`API returned ${response.status}: ${errorText}`);
+      // If there was an error, send back the error message
+      return {
+        imageUrl: getPlaceholderImageForError(response.status),
+        message: result.message || 'Error generating image',
+        success: false,
+        prompt: prompt
+      };
     }
-
-    let data;
-    try {
-      data = await response.json();
-    } catch (e) {
-      console.error('Error parsing API response:', e);
-      throw new Error('Invalid response from the API (JSON parsing failed)');
-    }
-
-    // Expected response format based on documentation:
-    // {
-    //   "created_at": 1733425519,
-    //   "credit_cost": 1,
-    //   "base64_images": ["..."],
-    //   "model": "RDModel.RD_FLUX",
-    //   "type": "txt2img",
-    //   "remaining_credits": 999
-    // }
     
-    // Validate response data
-    if (!data || !data.base64_images || !data.base64_images[0]) {
-      console.error('Invalid API response structure:', data);
-      throw new Error('Invalid response from the API');
-    }
-
-    // Convert base64 image to URL
-    const imageUrl = `data:image/png;base64,${data.base64_images[0]}`;
-    const pixelArtAscii = generatePlaceholderAsciiArt(sanitizedPrompt);
-
+    // Return the successful result
     return {
-      imageUrl: imageUrl,
-      success: true,
-      prompt: sanitizedPrompt,
-      pixelArtAscii,
-      remainingCredits: data.remaining_credits
+      ...result,
+      pixelArtAscii: generatePlaceholderAsciiArt(prompt)
     };
+    
   } catch (error) {
     console.error('Error generating pixel art:', error);
     
@@ -185,18 +117,21 @@ export const downloadPixelArt = async (url: string, filename: string): Promise<v
 };
 
 /**
- * Sanitize a user prompt to prevent injection attacks
- * @param prompt The prompt to sanitize
- * @returns A sanitized version of the prompt
+ * Get a placeholder image for different error types
+ * @param errorCode The HTTP error code
+ * @returns A data URL for the appropriate placeholder image
  */
-function sanitizePrompt(prompt: string): string {
-  if (!prompt) return '';
-  
-  // Remove any HTML tags
-  let sanitized = prompt.replace(/<[^>]*>/g, '');
-  
-  // Limit length
-  return sanitized.trim().substring(0, 1000);
+function getPlaceholderImageForError(errorCode: number): string {
+  if (errorCode === 429) {
+    // Rate limit placeholder
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEX/AAAZ4gk3AAAAXklEQVR42u3BMQEAAADCIPunNsU+YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+A0mCAABQ2/jwwAAAABJRU5ErkJggg==';
+  } else if (errorCode === 401 || errorCode === 403) {
+    // Auth error placeholder
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUAAACnej3aAAAAAXRSTlMAQObYZgAAADJJREFUaN7twTEBAAAAwiD7p14MH2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4N8AKvgAAUFrhu4AAAAASUVORK5CYII=';
+  } else {
+    // Generic error placeholder
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUfAAANkyPdAAAATklEQVR42u3BAQ0AAADCIPunNsIVYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODfAEQSAAFrfHJ/AAAAAElFTkSuQmCC';
+  }
 }
 
 /**
