@@ -47,8 +47,11 @@ export async function POST(request: NextRequest) {
       width: 256,
       height: 256,
       prompt: sanitizedPrompt,
-      num_images: 1,
-      prompt_style: "default" // Optional style parameter
+      num_inference_steps: 20,
+      guidance_scale: 7.5,
+      negative_prompt: "",
+      scheduler: "DDIM",
+      num_images: 1
     };
 
     // Log the request details (excluding sensitive data)
@@ -60,7 +63,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,  // Changed from X-RD-Token to Authorization
+        'X-RD-API-KEY': apiKey,  // Changed back to X-RD-API-KEY
         'Accept': 'application/json'
       },
       body: JSON.stringify(payload)
