@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     
     // Create API request payload according to documentation
     const payload = {
-      model: "RD_FLUX", // RD_CLASSIC is no longer supported
+      model: "RD_FLUX",
       width: 256,
       height: 256,
       prompt: sanitizedPrompt,
@@ -51,7 +51,11 @@ export async function POST(request: NextRequest) {
       guidance_scale: 7.5,
       negative_prompt: "",
       scheduler: "DDIM",
-      num_images: 1
+      num_images: 1,
+      seed: Math.floor(Math.random() * 1000000), // Random seed for variety
+      safety_check: true,
+      enhance_prompt: true,
+      self_attention: true
     };
 
     // Log the request details (excluding sensitive data)
@@ -63,8 +67,9 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-RD-API-KEY': apiKey,  // Changed back to X-RD-API-KEY
-        'Accept': 'application/json'
+        'Authorization': `Bearer ${apiKey}`, // Changed to Bearer token format
+        'Accept': 'application/json',
+        'User-Agent': 'Promixel/1.0'
       },
       body: JSON.stringify(payload)
     });
@@ -90,7 +95,7 @@ export async function POST(request: NextRequest) {
       if (response.status === 403) {
         return NextResponse.json({ 
           success: false, 
-          message: 'Authentication failed. Please check the API key configuration.' 
+          message: 'Authentication failed. Please verify your API key is valid and active.' 
         }, { status: 403 });
       }
       
