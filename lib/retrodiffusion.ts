@@ -14,6 +14,13 @@ export interface GenerationResult {
   remainingCredits?: number;
 }
 
+// In-memory cache to prevent duplicate requests
+const requestCache: { [key: string]: { result: GenerationResult, timestamp: number } } = {};
+
+// Track when the last request was made to prevent rapid fire requests
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 2000; // Minimum 2 seconds between requests
+
 /**
  * Generate pixel art using a secure server API route
  * @param prompt Text prompt to generate pixel art from
@@ -28,6 +35,30 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
         success: false
       };
     }
+
+    // Normalize the prompt for caching (trim whitespace, lowercase)
+    const normalizedPrompt = prompt.trim().toLowerCase();
+    
+    // Check if we have a cached result for this prompt
+    const cachedResult = requestCache[normalizedPrompt];
+    if (cachedResult && Date.now() - cachedResult.timestamp < 1000 * 60 * 10) { // Cache valid for 10 minutes
+      console.log('Using cached result for prompt:', prompt);
+      return cachedResult.result;
+    }
+    
+    // Prevent API spamming by enforcing a minimum time between requests
+    const now = Date.now();
+    if (now - lastRequestTime < MIN_REQUEST_INTERVAL) {
+      console.log(`Request throttled. Please wait ${Math.ceil((MIN_REQUEST_INTERVAL - (now - lastRequestTime)) / 1000)} seconds.`);
+      return {
+        imageUrl: '',
+        message: 'Please wait a moment before generating another image to prevent API abuse.',
+        success: false
+      };
+    }
+    
+    // Update last request time
+    lastRequestTime = now;
 
     console.log('Generating pixel art with prompt:', prompt);
     
@@ -53,11 +84,31 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
       };
     }
     
-    // Return the successful result
-    return {
+    // Add ASCII art to the result
+    const finalResult = {
       ...result,
       pixelArtAscii: generatePlaceholderAsciiArt(prompt)
     };
+    
+    // Cache the successful result
+    if (result.success && result.imageUrl) {
+      requestCache[normalizedPrompt] = {
+        result: finalResult,
+        timestamp: Date.now()
+      };
+      
+      // Clean up old cache entries (keep last 20 successful generations)
+      const cacheEntries = Object.keys(requestCache);
+      if (cacheEntries.length > 20) {
+        const oldestKey = cacheEntries.reduce((oldest, key) => {
+          return requestCache[key].timestamp < requestCache[oldest].timestamp ? key : oldest;
+        }, cacheEntries[0]);
+        delete requestCache[oldestKey];
+      }
+    }
+    
+    // Return the successful result
+    return finalResult;
     
   } catch (error) {
     console.error('Error generating pixel art:', error);
