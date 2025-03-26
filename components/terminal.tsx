@@ -143,98 +143,14 @@ export const Terminal = () => {
 
   // Process generate command
   const handleGenerate = async (promptText: string) => {
-    // Mark this as a user-initiated action
-    markUserAction();
-
-    // Prevent empty prompts
-    if (!promptText || promptText.trim() === '') {
-      setHistory(prev => [...prev, { 
-        type: 'error', 
-        content: 'Please provide a prompt to generate an image.' 
-      }]);
-      return;
-    }
-    
-    // Don't allow generation if already loading
-    if (loading) {
-      setHistory(prev => [...prev, { 
-        type: 'error', 
-        content: 'Already generating an image. Please wait for the current generation to complete.' 
-      }]);
-      return;
-    }
-
-    // Check if user is logged in
-    if (!user) {
-      setHistory(prev => [...prev, { 
-        type: 'error', 
-        content: 'You need to log in before generating images. Please use the login button at the top left corner.' 
-      }]);
-      return;
-    }
-    
-    // Check if the user has already generated an image (non-premium users)
-    if (hasGeneratedImage && (!user?.email?.includes('@premium') && !user?.email?.includes('@admin'))) {
-      setHistory(prev => [...prev, { 
-        type: 'error', 
-        content: 'You have reached your image generation limit. Premium users can generate unlimited images.' 
-      }]);
-      return;
-    }
-    
-    // Set loading state and update UI
-    setLoading(true);
-    setImageError('');
+    // Instead of generating an image, show server busy message
     setHistory(prev => [...prev, { 
-      type: 'output', 
-      content: `Generating pixel art for: "${promptText}"...\nThis may take a few seconds.` 
+      type: 'error', 
+      content: 'The server is too busy right now. Please try again after some time.' 
     }]);
     
-    try {
-      // Generate the image
-      const result = await generatePixelArt(promptText);
-      
-      if (result.success && result.imageUrl) {
-        // Update state on success
-        setImageUrl(result.imageUrl);
-        setPrompt(promptText);
-        setHistory(prev => [...prev, { 
-          type: 'output', 
-          content: result.pixelArtAscii || 'Pixel art generated successfully!' 
-        }]);
-        
-        // Track that the user has generated an image
-        if (!hasGeneratedImage) {
-          localStorage.setItem(`promixel_generated_${user.id}`, 'true');
-          setHasGeneratedImage(true);
-        }
-        
-        // Add to recent generations
-        const newGeneration = {
-          prompt: promptText,
-          imageUrl: result.imageUrl,
-          timestamp: new Date()
-        };
-        setRecentGenerations(prev => [newGeneration, ...prev].slice(0, 10));
-      } else {
-        // Handle generation error
-        setImageError(result.message || 'Failed to generate image');
-        setHistory(prev => [...prev, { 
-          type: 'error', 
-          content: result.message || 'Failed to generate image' 
-        }]);
-      }
-    } catch (error) {
-      // Handle unexpected errors
-      console.error('Error generating image:', error);
-      setImageError('An unexpected error occurred');
-      setHistory(prev => [...prev, { 
-        type: 'error', 
-        content: 'An unexpected error occurred while generating the image' 
-      }]);
-    } finally {
-      setLoading(false);
-    }
+    // Don't proceed with generation
+    return;
   };
 
   // Handle form submission
