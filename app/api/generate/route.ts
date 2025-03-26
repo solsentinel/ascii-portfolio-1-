@@ -29,6 +29,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Log environment check (for debugging)
+    console.log('Environment check:', {
+      hasApiKey: !!apiKey,
+      apiEndpoint,
+      keyLength: apiKey?.length
+    });
+
     // Sanitize prompt (basic sanitization)
     const sanitizedPrompt = sanitizePrompt(prompt);
     
@@ -43,13 +50,18 @@ export async function POST(request: NextRequest) {
       num_images: 1,
       prompt_style: "default" // Optional style parameter
     };
+
+    // Log the request details (excluding sensitive data)
+    console.log('Making API request to:', apiEndpoint);
+    console.log('Request payload:', { ...payload, apiKeyPresent: !!apiKey });
     
     // Make API request to RetoDiffusion
     const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-RD-Token': apiKey
+        'Authorization': `Bearer ${apiKey}`,  // Changed from X-RD-Token to Authorization
+        'Accept': 'application/json'
       },
       body: JSON.stringify(payload)
     });
@@ -57,9 +69,14 @@ export async function POST(request: NextRequest) {
     // Handle API response errors
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API error:', response.status, errorText);
+      console.error('API error details:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        error: errorText
+      });
       
-      // Handle rate limiting specially
+      // Handle specific error cases
       if (response.status === 429) {
         return NextResponse.json({ 
           success: false, 
@@ -67,14 +84,35 @@ export async function POST(request: NextRequest) {
         }, { status: 429 });
       }
       
+      if (response.status === 403) {
+        return NextResponse.json({ 
+          success: false, 
+          message: 'Authentication failed. Please check the API key configuration.' 
+        }, { status: 403 });
+      }
+      
+      if (response.status === 401) {
+        return NextResponse.json({ 
+          success: false, 
+          message: 'Invalid API key. Please check your configuration.' 
+        }, { status: 401 });
+      }
+      
       return NextResponse.json({ 
         success: false, 
-        message: `API error: ${response.status}` 
-      }, { status: 500 });
+        message: `API error: ${response.status} - ${errorText || response.statusText}` 
+      }, { status: response.status });
     }
 
     // Parse the response
     const data = await response.json();
+    
+    // Log successful response structure (excluding sensitive data)
+    console.log('API response structure:', {
+      hasBase64Images: !!data?.base64_images,
+      imageCount: data?.base64_images?.length,
+      remainingCredits: data?.remaining_credits
+    });
     
     // Validate response data
     if (!data || !data.base64_images || !data.base64_images[0]) {
