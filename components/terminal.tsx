@@ -244,26 +244,23 @@ export const Terminal = () => {
         
         const result = await generatePixelArt(newPrompt);
         
-        if (result.message) {
-          // Check if the message contains rate limit information
-          if (result.message.includes('Credit limit reached')) {
-            setHistory(prev => [...prev, { 
-              type: 'error', 
-              content: result.message || 'Credit limit reached. Please try again later.' 
-            }]);
-            // Set a placeholder image for rate limit
-            if (result.imageUrl) {
-              setImageUrl(result.imageUrl);
-            }
-          } else {
-            setHistory(prev => [...prev, { 
-              type: 'output', 
-              content: result.message || 'Image generated successfully.' 
-            }]);
+        // Check for any errors first
+        if (!result.success) {
+          setHistory(prev => [...prev, { 
+            type: 'error', 
+            content: result.message || 'An error occurred while generating the image.'
+          }]);
+          
+          // If there's an image URL despite the error (e.g., placeholder image), still show it
+          if (result.imageUrl) {
+            setImageUrl(result.imageUrl);
           }
+          
+          return; // Exit early on error - don't show success message
         }
         
-        if (result.imageUrl && !result.message?.includes('Credit limit reached')) {
+        // Only show success message and set imageUrl on successful generation
+        if (result.imageUrl) {
           setImageUrl(result.imageUrl);
           
           // Add to recent generations
@@ -286,7 +283,8 @@ export const Terminal = () => {
           if (user) {
             localStorage.setItem(`promixel_generated_${user.id}`, 'true');
           }
-        } else if (!result.imageUrl) {
+        } else {
+          // No image URL in the response
           throw new Error('No image URL in response');
         }
       } catch (error) {
@@ -388,12 +386,112 @@ export const Terminal = () => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Add mobile detection
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  // Check if the user is on a mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    // Check initially
+    checkMobile();
+    
+    // Listen for resize events
+    window.addEventListener('resize', checkMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
+
+  // Focus input on specific events that are mobile-friendly
+  const focusInput = () => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  // Handle terminal click to focus input on mobile
+  const handleTerminalClick = () => {
+    if (isMobile) {
+      focusInput();
+    }
+  };
+
+  // Add quick command execution for mobile
+  const executeCommand = (cmd: string) => {
+    // Set the input and immediately submit if it's a simple command
+    setInput(cmd);
+    setTimeout(() => {
+      const command = cmd.trim();
+      
+      // Don't process empty commands
+      if (!command) return;
+      
+      // Add the command to history
+      setHistory(prev => [...prev, { type: 'input', content: `> ${command}` }]);
+      setInput('');
+      
+      // Process commands
+      if (command === 'clear') {
+        setHistory([]);
+        setImageUrl('');
+        setPrompt('');
+        setImageError('');
+        return;
+      }
+      
+      if (command === 'help') {
+        const helpOutput = [
+          'Available commands:',
+          ...Object.entries(commands).map(([cmd, desc]) => `  ${cmd} - ${desc}`),
+        ].join('\n');
+        setHistory(prev => [...prev, { type: 'output', content: helpOutput }]);
+        return;
+      }
+      
+      if (command === 'exit') {
+        setHistory(prev => [...prev, { type: 'output', content: 'Goodbye!' }]);
+        return;
+      }
+
+      if (command === 'login') {
+        setHistory(prev => [...prev, { 
+          type: 'output', 
+          content: 'Please use the login button at the top left corner of the screen.' 
+        }]);
+        return;
+      }
+
+      if (command === 'logout') {
+        supabase.auth.signOut().then(() => {
+          setHistory(prev => [...prev, { type: 'output', content: 'You have been logged out.' }]);
+        }).catch(() => {
+          setHistory(prev => [...prev, { type: 'error', content: 'Failed to log out.' }]);
+        });
+        return;
+      }
+
+      if (command === 'recent') {
+        setShowRecent(!showRecent);
+        setHistory(prev => [...prev, { 
+          type: 'output', 
+          content: showRecent ? 'Recent generations hidden.' : 'Showing recent generations.'
+        }]);
+        return;
+      }
+    }, 10);
+  };
+
   return (
     <>
       <div className="w-full max-w-4xl mx-auto h-full flex flex-col">
         <div 
           ref={terminalRef}
           className="flex-1 bg-black/60 text-green-400 font-mono p-6 overflow-y-auto rounded-t-lg backdrop-blur-sm border border-white/10 pixel-effect pixel-border"
+          onClick={handleTerminalClick}
         >
           <AsciiLogo />
           
@@ -401,8 +499,12 @@ export const Terminal = () => {
             <div className="text-white font-bold mb-3 pixel-effect text-2xl" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
             {Object.entries(commands).map(([cmd, desc]) => (
               <div key={cmd} className="text-lg ml-4 my-2">
-                <span className="text-cyan-400 font-bold pixel-effect text-xl" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
-      </div>
+                <span 
+                  className="text-cyan-400 font-bold pixel-effect text-xl cursor-pointer hover:underline"
+                  style={{ fontFamily: "var(--font-pixel)" }}
+                  onClick={() => executeCommand(cmd)}
+                >{cmd}</span> - <span className="text-gray-300">{desc}</span>
+              </div>
             ))}
             <div className="text-lg mt-4 text-amber-300">
               Note: Limited to 1 image generation per user. This limit helps us provide high-quality images to everyone.
@@ -414,6 +516,21 @@ export const Terminal = () => {
               </div>
             )}
           </div>
+
+          {/* Mobile Quick Command Buttons */}
+          {isMobile && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {Object.keys(commands).map(cmd => (
+                <button
+                  key={cmd}
+                  onClick={() => executeCommand(cmd)}
+                  className="bg-black/70 px-3 py-2 rounded-md border border-cyan-500/30 text-cyan-400 text-sm"
+                >
+                  {cmd}
+                </button>
+              ))}
+            </div>
+          )}
           
           {history.map((entry, i) => (
             <div 
@@ -528,33 +645,56 @@ export const Terminal = () => {
                         </button>
                       </div>
                     </div>
-          </div>
-        ))}
+                  </div>
+                ))}
               </div>
             </div>
           )}
-      </div>
+        </div>
 
+        {/* Input bar with mobile optimizations */}
         <form 
-          onSubmit={handleSubmit} 
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSubmit(e);
+            if (isMobile) {
+              // This slight delay helps with mobile keyboard issues
+              setTimeout(() => focusInput(), 50);
+            }
+          }}
           className="flex bg-black/80 rounded-b-lg overflow-hidden border-x border-b border-white/10 pixel-effect"
         >
-          <span className="p-3 text-cyan-400 font-mono text-2xl">$</span>
+          <span className="p-3 text-cyan-400 font-mono text-2xl flex items-center">$</span>
           <input
             ref={inputRef}
             type="text"
+            inputMode={isMobile ? "text" : undefined}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             className="flex-1 bg-transparent text-white font-mono p-3 focus:outline-none pixel-effect text-2xl"
             disabled={loading}
-            placeholder={loading ? 'Processing...' : 'Type a command...'}
+            placeholder={loading ? 'Processing...' : isMobile ? 'Tap to type...' : 'Type a command...'}
             onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
           />
+          {isMobile && input && (
+            <button
+              type="submit"
+              className="px-4 bg-cyan-600 text-white font-bold"
+              onClick={(e) => {
+                e.preventDefault();
+                handleSubmit(e);
+              }}
+            >
+              Enter
+            </button>
+          )}
         </form>
         
-        {/* Command Suggestions */}
+        {/* Command Suggestions - Mobile Optimized */}
         {suggestions.length > 0 && (
-          <div className="bg-black/90 border border-white/10 rounded-md shadow-lg mt-1 overflow-hidden">
+          <div className="bg-black/90 border border-white/10 rounded-md shadow-lg mt-1 overflow-hidden max-h-60 overflow-y-auto">
             {suggestions.map((suggestion, index) => (
               <div 
                 key={suggestion}
@@ -562,14 +702,20 @@ export const Terminal = () => {
                   index === selectedSuggestion 
                     ? 'bg-cyan-500/20 text-white' 
                     : 'text-gray-300 hover:bg-black/60'
-                }`}
+                } ${isMobile ? 'py-4 text-lg' : ''}`}
                 onClick={() => {
                   if (suggestion === 'generate' && input.trim() !== 'generate') {
                     setInput('generate ');
                   } else {
                     setInput(suggestion);
                   }
-                  inputRef.current?.focus();
+                  
+                  // On mobile, complete and execute if it's a simple command
+                  if (isMobile && suggestion !== 'generate') {
+                    executeCommand(suggestion);
+                  } else {
+                    inputRef.current?.focus();
+                  }
                 }}
               >
                 {suggestion}
