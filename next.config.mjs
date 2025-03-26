@@ -21,6 +21,19 @@ const nextConfig = {
     parallelServerBuildTraces: true,
     parallelServerCompiles: true,
   },
+  // Handle the same routes that were in vercel.json
+  async rewrites() {
+    return [
+      {
+        source: '/:path*',
+        destination: '/:path*',
+      },
+      {
+        source: '/',
+        destination: '/',
+      }
+    ]
+  }
 }
 
 mergeConfig(nextConfig, userConfig)
