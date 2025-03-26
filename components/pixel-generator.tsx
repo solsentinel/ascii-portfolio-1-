@@ -29,6 +29,17 @@ export default function PixelGenerator() {
       return;
     }
 
+    // Basic prompt guidance for better results
+    if (prompt.trim().length < 3) {
+      setError('Please enter a more descriptive prompt (at least 3 characters)');
+      return;
+    }
+
+    // Show tips for better prompts
+    if (prompt.trim().length < 5) {
+      setMessage('Tip: More descriptive prompts usually give better results');
+    }
+
     // Prevent rapid-fire API calls
     const now = Date.now();
     if (now - lastGenerationTime < MIN_GENERATION_INTERVAL) {
@@ -52,7 +63,15 @@ export default function PixelGenerator() {
         setGeneratedImage(result.imageUrl);
         setMessage(result.message || 'Pixel art generated successfully!');
       } else {
-        setError(result.message || 'Failed to generate pixel art. Please try again.');
+        // Handle specific error types
+        if (result.message?.includes('422') || result.message?.includes('Validation Error')) {
+          setError('The API had trouble processing your prompt. Try something simpler or more specific.');
+        } else if (result.message?.includes('429') || result.message?.includes('limit')) {
+          setError('Rate limit reached. Please try again later.');
+        } else {
+          setError(result.message || 'Failed to generate pixel art. Please try again.');
+        }
+        
         // Still show any image that might have been returned (like an error image)
         if (result.imageUrl) {
           setGeneratedImage(result.imageUrl);

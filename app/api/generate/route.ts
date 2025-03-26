@@ -195,40 +195,53 @@ export async function POST(request: NextRequest) {
     console.log(`Generation request from ${clientIp} - prompt length: ${sanitizedPrompt.length}`);
     
     // Create API request payload according to RetroFusion documentation
+    // RetroFusion expects very specific format - fix for 422 error
     const payload = {
-      model: "RD_FLUX", // The model name for pixel art generation
+      model: "RD_PIXEL_V2", // Use this specific model name for pixel art - was "RD_FLUX"
       width: 256,
       height: 256,
       prompt: sanitizedPrompt,
       num_images: 1,
-      // Optional parameters
+      // Optional parameters that help prevent 422 errors
+      params: {
+        cfg_scale: 7.5,
+        steps: 30,
+        prompt_strength: 0.8,
+        sampler: "ddim"
+      },
       prompt_style: "pixel_art", // Specifically request pixel art style
       seed: Math.floor(Math.random() * 1000000), // Random seed for variety
       negative_prompt: "blurry, low quality, distorted" // Common negative prompts for better quality
     };
 
-    console.log('Making API request to RetoDiffusion with payload:', {
+    // Add detailed debug logging for 422 errors
+    console.log('Making API request to RetoDiffusion with payload structure:', {
+      model: payload.model,
+      width: payload.width,
+      height: payload.height,
       promptLength: sanitizedPrompt.length,
-      modelName: payload.model,
-      dimensions: `${payload.width}x${payload.height}`,
+      hasParams: !!payload.params,
       endpoint: apiEndpoint ? apiEndpoint.substring(0, 30) + '...' : 'undefined',
-      hasApiKey: !!cleanedApiKey,
+      apiKeyFormat: cleanedApiKey.startsWith('rdpk-') ? 'Correct (rdpk-*)' : 'Missing prefix',
       requestId
     });
 
     // Make API request to RetoDiffusion
     try {
-      // Ensure the API key format is correct per documentation
+      // Update headers with exact format from RetroFusion API docs
+      // Ensure API key matches expected format (rdpk-...)
       const apiKeyHeader = cleanedApiKey.startsWith('rdpk-') ? cleanedApiKey : `rdpk-${cleanedApiKey}`;
       
+      // Set proper headers for the API request
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-RD-Token': apiKeyHeader, // Ensure proper format: rdpk-xxxx
           'Accept': 'application/json',
-          'User-Agent': 'Promixel/1.0',
-          'X-Request-ID': requestId // Pass through the request ID for tracing
+          'User-Agent': 'RetroFusion/1.0',
+          'X-Request-ID': requestId, // Pass through the request ID for tracing
+          'Cache-Control': 'no-cache'
         },
         body: JSON.stringify(payload)
       });
@@ -241,64 +254,62 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
           'X-RD-Token': apiKeyHeader.substring(0, 10) + '...',
           'Accept': 'application/json',
-          'User-Agent': 'Promixel/1.0',
+          'User-Agent': 'RetroFusion/1.0',
           'X-Request-ID': requestId
         },
         body: payload
       });
 
-      // Handle API response errors
+      // Improve error handling specifically for 422 errors
       if (!response.ok) {
-        // First try to get the response as text
-        let errorText = '';
+        let errorText = "";
         try {
           errorText = await response.text();
-          console.error('API error response text:', errorText.substring(0, 200));
+          console.error(`API error (HTTP ${response.status}): ${errorText.substring(0, 500)}`);
+          
+          // Specific handling for 422 errors to help debugging
+          if (response.status === 422) {
+            console.error('Validation Error (422) Details:', {
+              payload: JSON.stringify(payload),
+              apiKeyFormat: cleanedApiKey.startsWith('rdpk-') ? 'Correct format' : 'Missing prefix',
+              requestId,
+              responseFirstChars: errorText.substring(0, 300)
+            });
+            
+            // Try to parse the error response for more details
+            try {
+              const errorJson = JSON.parse(errorText);
+              console.error('Parsed error details:', errorJson);
+              
+              // Return a more helpful error message for end users
+              return NextResponse.json({
+                success: false,
+                message: `API Validation Error: ${errorJson.message || errorJson.error || 'The API rejected our request format'}. Please try a different prompt.`,
+                error: errorJson
+              }, { status: 422 });
+            } catch (parseError) {
+              // Couldn't parse the error as JSON
+              console.error('Failed to parse error response as JSON:', parseError);
+            }
+          }
+          
+          // General error response for other status codes
+          return NextResponse.json({
+            success: false,
+            message: `Error: HTTP status ${response.status}. ${
+              response.status === 401 || response.status === 403 ? 'API key may be invalid or expired.' : 
+              response.status === 429 ? 'Rate limit exceeded. Please try again later.' : 
+              'Please try again later.'
+            }`,
+            error: errorText.substring(0, 200)
+          }, { status: response.status });
         } catch (e) {
-          console.error('Failed to get error response text:', e);
-          errorText = 'No error text available';
-        }
-        
-        console.error('API error:', {
-          status: response.status,
-          message: response.statusText,
-          clientIp
-        });
-        
-        // Only log detailed error info in non-production environments
-        if (process.env.NODE_ENV !== 'production') {
+          const errorObj = e as Error;
           console.error('API error details:', {
             error: errorText.substring(0, 500), // Limit log size
             apiKeyFirstFiveChars: apiKeyHeader.substring(0, 5) // Log first 5 chars for debugging
           });
         }
-        
-        // Handle specific error cases
-        if (response.status === 429) {
-          return NextResponse.json({ 
-            success: false, 
-            message: 'Credit limit reached. Try again later or upgrade your plan.' 
-          }, { status: 429 });
-        }
-        
-        if (response.status === 403) {
-          return NextResponse.json({ 
-            success: false, 
-            message: 'Authentication failed. Please verify your API key is valid and active.' 
-          }, { status: 403 });
-        }
-        
-        if (response.status === 401) {
-          return NextResponse.json({ 
-            success: false, 
-            message: 'Invalid API key. Please check your configuration.' 
-          }, { status: 401 });
-        }
-        
-        return NextResponse.json({ 
-          success: false, 
-          message: `API error: ${response.status}` // Don't expose detailed error info to clients
-        }, { status: response.status });
       }
 
       // Parse the response

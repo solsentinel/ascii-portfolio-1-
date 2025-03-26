@@ -276,6 +276,16 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
             };
           }
           
+          // Handle validation errors (422 Unprocessable Entity)
+          if (text.includes('validation') || text.includes('invalid') || text.includes('unprocessable')) {
+            return {
+              imageUrl: getPlaceholderImageForError(422),
+              message: 'API validation error: Your prompt might be too complex or contain invalid characters.',
+              success: false,
+              prompt: prompt
+            };
+          }
+          
           throw new Error(`JSON parsing error: ${parseError.message}. Response was not valid JSON.`);
         }
       } catch (error) {
@@ -388,18 +398,21 @@ export const downloadPixelArt = async (url: string, filename: string): Promise<v
 
 /**
  * Get a placeholder image for different error types
- * @param errorCode The HTTP error code
+ * @param statusCode The HTTP error code
  * @returns A data URL for the appropriate placeholder image
  */
-function getPlaceholderImageForError(errorCode: number): string {
-  if (errorCode === 429) {
-    // Rate limit placeholder
+function getPlaceholderImageForError(statusCode: number): string {
+  if (statusCode === 429) {
+    // Rate limit / credit limit exceeded
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEX/AAAZ4gk3AAAAXklEQVR42u3BMQEAAADCIPunNsU+YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+A0mCAABQ2/jwwAAAABJRU5ErkJggg==';
-  } else if (errorCode === 401 || errorCode === 403) {
-    // Auth error placeholder
+  } else if (statusCode === 401 || statusCode === 403) {
+    // Authentication errors
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUAAACnej3aAAAAAXRSTlMAQObYZgAAADJJREFUaN7twTEBAAAAwiD7p14MH2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4N8AKvgAAUFrhu4AAAAASUVORK5CYII=';
+  } else if (statusCode === 422) {
+    // Validation error (unprocessable entity)
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUfAwAyLTE9AAAAXklEQVR42u3BMQEAAADCIPunNsU+YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+A0mCAABQ2/jwwAAAABJRU5ErkJggg==';
   } else {
-    // Generic error placeholder
+    // Other unknown errors
     return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUfAAANkyPdAAAATklEQVR42u3BAQ0AAADCIPunNsIVYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODfAEQSAAFrfHJ/AAAAAElFTkSuQmCC';
   }
 }
