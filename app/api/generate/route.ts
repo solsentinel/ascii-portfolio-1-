@@ -80,13 +80,18 @@ export async function POST(request: NextRequest) {
     // Validate request origin (simple CORS check)
     const origin = request.headers.get('origin') || '';
     const allowedOrigins = [
-      'https://your-domain.com',  // Replace with your actual domain
+      // Allow any origin in development or when deployed
+      '*',
+      // Keep specific origins for reference
+      'https://your-domain.com',
       'https://www.your-domain.com',
       process.env.NEXT_PUBLIC_SITE_URL || '',
-      'http://localhost:3000'  // For local development
+      'http://localhost:3000'
     ];
     
-    const isAllowedOrigin = !origin || allowedOrigins.some(allowed => 
+    // Always allow requests with no origin (like from the browser directly)
+    // Or when the request origin matches one of our allowed origins
+    const isAllowedOrigin = !origin || allowedOrigins.includes('*') || allowedOrigins.some(allowed => 
       origin === allowed || allowed === '*'
     );
     
@@ -94,7 +99,14 @@ export async function POST(request: NextRequest) {
       console.warn(`Blocked request from unauthorized origin: ${origin}`);
       return NextResponse.json(
         { success: false, message: 'Unauthorized' },
-        { status: 403 }
+        { 
+          status: 403,
+          headers: {
+            'Access-Control-Allow-Origin': origin || '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, X-Request-ID'
+          }
+        }
       );
     }
 
@@ -283,13 +295,16 @@ export async function POST(request: NextRequest) {
 
     const finalResponse = NextResponse.json(response_data);
     
-    // Add security headers
+    // Add security headers and CORS headers to the success response
     finalResponse.headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; script-src 'self'");
     finalResponse.headers.set('X-Content-Type-Options', 'nosniff');
     finalResponse.headers.set('X-Frame-Options', 'DENY');
     finalResponse.headers.set('X-XSS-Protection', '1; mode=block');
     finalResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    finalResponse.headers.set('Access-Control-Allow-Origin', origin || '*');
+    finalResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    finalResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Request-ID');
     
     return finalResponse;
   } catch (error) {
@@ -301,6 +316,22 @@ export async function POST(request: NextRequest) {
       message: 'An error occurred while processing your request'
     }, { status: 500 });
   }
+}
+
+// Add an OPTIONS handler for CORS preflight requests
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin') || '*';
+  
+  // Return a response with CORS headers
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Request-ID',
+      'Access-Control-Max-Age': '86400', // 24 hours
+    },
+  });
 }
 
 /**

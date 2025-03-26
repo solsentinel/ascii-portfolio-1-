@@ -1,5 +1,31 @@
 import { NextResponse } from 'next/server';
 
+// *** CRITICAL SECURITY FIX: DISABLE OLD ENDPOINT ***
+// This endpoint appears to be automatically triggered on page load,
+// which is rapidly depleting API credits.
+export async function POST(request: Request) {
+  console.error('⚠️ SECURITY ALERT: Deprecated API route /api/retrodiffusion accessed');
+  console.error('This route has been disabled to prevent automatic API calls');
+  
+  // Get client IP for logging
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  const clientIp = forwardedFor ? forwardedFor.split(',')[0].trim() : 
+                  request.headers.get('x-real-ip') || 'unknown-ip';
+  
+  // Log the attempted access with timestamp                
+  console.error(`Blocked access attempt from ${clientIp} at ${new Date().toISOString()}`);
+  
+  // Return error response - do not make actual API calls
+  return NextResponse.json({ 
+    message: 'This endpoint has been disabled. Please use /api/generate instead.',
+    imageUrl: "https://via.placeholder.com/256x256/1a1a1a/ffffff?text=API+Disabled",
+    pixelArtAscii: "",
+    prompt: "API disabled for security"
+  }, { status: 403 });
+}
+
+// ORIGINAL CODE BELOW (commented out to prevent execution)
+/* 
 // Define a type for our rate limit tracking
 type RateLimitInfo = {
   usedCredits: number;
@@ -248,8 +274,9 @@ function generatePlaceholderAsciiArt(prompt: string): string {
     `
   ];
   
-  // Fix: Safely access prompt.length, defaulting to 0 if prompt is null or undefined
+  // Pick a pattern based on the prompt (just for demonstration)
   const promptLength = prompt?.length || 0;
   const index = Math.floor(promptLength % patterns.length);
   return patterns[index];
-} 
+}
+*/ 

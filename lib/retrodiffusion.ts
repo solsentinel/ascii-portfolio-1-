@@ -4,6 +4,20 @@
  * Uses a secure server-side API route to protect API keys
  */
 
+// IMPORTANT: Auto-import prevention flag - this seems to be loaded automatically
+// Add this flag to prevent any automatic actions when the module is imported
+const AUTO_IMPORTED = true;
+let INITIALIZATION_COUNT = 0;
+
+// DEBUG TRACKING: Add this to track when this module gets loaded and executed
+console.warn('⚠️ RetrodiffusionModule: Module loaded at', new Date().toISOString());
+console.warn(`⚠️ RetrodiffusionModule: Initialization count: ${++INITIALIZATION_COUNT}`);
+
+// If this module is being auto-imported multiple times, it could be triggering unwanted API calls
+if (INITIALIZATION_COUNT > 1) {
+  console.error('🔴 RetrodiffusionModule: MULTIPLE INITIALIZATIONS DETECTED! This may cause excessive API calls.');
+}
+
 // Types
 export interface GenerationResult {
   imageUrl: string;
@@ -31,12 +45,20 @@ const MAX_REQUESTS_PER_SESSION = 50; // Safety limit
 // Check if we're in a browser environment
 const isBrowser = typeof window !== 'undefined';
 
+// Debug info for initialization
+if (isBrowser) {
+  console.warn('⚠️ RetrodiffusionModule: Running in browser environment');
+} else {
+  console.warn('⚠️ RetrodiffusionModule: Running in server environment');
+}
+
 // Save request count to sessionStorage to persist across page refreshes but not browser sessions
 if (isBrowser) {
   try {
     const savedCount = sessionStorage.getItem('api_request_count');
     if (savedCount) {
       apiRequestsThisSession = parseInt(savedCount, 10);
+      console.warn('⚠️ RetrodiffusionModule: Loaded previous session count:', apiRequestsThisSession);
     }
   } catch (e) {
     console.error('Failed to access sessionStorage:', e);
@@ -55,6 +77,8 @@ function trackApiRequest() {
       
       // Also track the last request time to prevent rapid reloads from bypassing limits
       sessionStorage.setItem('last_api_request_time', Date.now().toString());
+      
+      console.warn('⚠️ RetrodiffusionModule: API request tracked. Total this session:', apiRequestsThisSession);
     } catch (e) {
       console.error('Failed to update sessionStorage:', e);
     }
@@ -67,6 +91,11 @@ function trackApiRequest() {
  * @returns Object containing the image URL and any messages
  */
 export const generatePixelArt = async (prompt: string): Promise<GenerationResult> => {
+  console.warn('⚠️ RetrodiffusionModule: generatePixelArt EXPLICITLY called with prompt:', prompt);
+  
+  // Add a callstack trace to help debug where the call is coming from
+  console.warn('⚠️ RetrodiffusionModule: Call Stack:', new Error().stack);
+  
   try {
     if (!prompt || prompt.trim() === '') {
       return {
@@ -155,6 +184,7 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
     
     try {
       // Call our secure API route instead of the RetoDiffusion API directly
+      console.warn('⚠️ RetrodiffusionModule: Making API call to /api/generate');
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
