@@ -63,13 +63,12 @@ export default function RootLayout({
           `}
         </style>
       </head>
-      <body className={`${inter.variable} ${pixelFont.variable} bg-black text-white min-h-screen`}>
+      <body className={`${inter.variable} ${pixelFont.variable}`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
+          defaultTheme="light"
+          enableSystem={true}
           disableTransitionOnChange
-          forcedTheme="dark"
         >
           {children}
         </ThemeProvider>
