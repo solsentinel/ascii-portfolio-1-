@@ -30,6 +30,7 @@ export const Terminal = () => {
   const [showRecent, setShowRecent] = useState<boolean>(false);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [user, setUser] = useState<User | null>(null);
+  const [hasGeneratedImage, setHasGeneratedImage] = useState<boolean>(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const supabase = createClientComponentClient();
@@ -37,24 +38,42 @@ export const Terminal = () => {
   // Available commands
   const commands = {
     clear: 'Clear terminal history',
-    generate: 'Generate pixel art (usage: generate <your prompt>)',
+    generate: 'Generate pixel art (usage: generate <your prompt>) - Limited to 1 generation',
     recent: 'Toggle view of recent generations',
     login: 'Log in or sign up to use Promixel',
     logout: 'Log out of your account',
     exit: 'Exit the application',
   };
 
-  // Check authentication status on mount
+  // Check authentication status and generation limit on mount
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
+      
+      // Check if the user has already generated an image
+      if (user) {
+        const hasGenerated = localStorage.getItem(`promixel_generated_${user.id}`);
+        if (hasGenerated === 'true') {
+          setHasGeneratedImage(true);
+        }
+      }
     };
     
     checkUser();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
+      
+      // Check generation limit when auth state changes
+      if (session?.user) {
+        const hasGenerated = localStorage.getItem(`promixel_generated_${session.user.id}`);
+        if (hasGenerated === 'true') {
+          setHasGeneratedImage(true);
+        } else {
+          setHasGeneratedImage(false);
+        }
+      }
     });
 
     return () => {
@@ -75,6 +94,52 @@ export const Terminal = () => {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, [history]);
+
+  // Add state for command suggestions
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<number>(-1);
+
+  // Update suggestions when input changes
+  useEffect(() => {
+    if (input.trim()) {
+      const commandSuggestions = Object.keys(commands).filter(cmd => 
+        cmd.startsWith(input.trim()) || 
+        (input.trim().startsWith('generate ') && cmd === 'generate')
+      );
+      setSuggestions(commandSuggestions);
+    } else {
+      setSuggestions([]);
+    }
+    setSelectedSuggestion(-1);
+  }, [input]);
+
+  // Handle keyboard navigation for suggestions
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedSuggestion(prev => (prev + 1) % suggestions.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedSuggestion(prev => (prev <= 0 ? suggestions.length - 1 : prev - 1));
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        if (selectedSuggestion >= 0) {
+          if (suggestions[selectedSuggestion] === 'generate' && input.trim() !== 'generate') {
+            setInput('generate ');
+          } else {
+            setInput(suggestions[selectedSuggestion]);
+          }
+        } else if (suggestions.length > 0) {
+          if (suggestions[0] === 'generate' && input.trim() !== 'generate') {
+            setInput('generate ');
+          } else {
+            setInput(suggestions[0]);
+          }
+        }
+      }
+    }
+  };
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
@@ -112,8 +177,11 @@ export const Terminal = () => {
     }
 
     if (command === 'login') {
-      setShowAuthModal(true);
-      setHistory(prev => [...prev, { type: 'output', content: 'Opening login form...' }]);
+      // Instead of showing modal, inform user to use the login button
+      setHistory(prev => [...prev, { 
+        type: 'output', 
+        content: 'Please use the login button at the top left corner of the screen.' 
+      }]);
       return;
     }
 
@@ -142,6 +210,14 @@ export const Terminal = () => {
         setHistory(prev => [...prev, { 
           type: 'error', 
           content: 'Error: You need to log in to generate images. Type "login" to sign in or create an account.' 
+        }]);
+        return;
+      }
+      
+      if (hasGeneratedImage) {
+        setHistory(prev => [...prev, { 
+          type: 'error', 
+          content: 'Error: You have reached your generation limit. Each user can only generate 1 image.' 
         }]);
         return;
       }
@@ -204,6 +280,12 @@ export const Terminal = () => {
             type: 'output', 
             content: `✓ Pixel art generated!` 
           }]);
+          
+          // Mark that the user has generated an image
+          setHasGeneratedImage(true);
+          if (user) {
+            localStorage.setItem(`promixel_generated_${user.id}`, 'true');
+          }
         } else if (!result.imageUrl) {
           throw new Error('No image URL in response');
         }
@@ -254,27 +336,27 @@ export const Terminal = () => {
     
     // Create a fallback image with error message
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
+    canvas.width = 400; // Increased from default 256
+    canvas.height = 400; // Increased from default 256
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
       // Fill background
       ctx.fillStyle = '#111';
-      ctx.fillRect(0, 0, 256, 256);
+      ctx.fillRect(0, 0, 400, 400);
       
       // Add error message
       ctx.fillStyle = '#ff3333';
-      ctx.font = '16px monospace';
+      ctx.font = '24px monospace'; // Increased font size
       ctx.textAlign = 'center';
-      ctx.fillText('Image Generation Failed', 128, 100);
-      ctx.fillText('Check Console for Details', 128, 130);
+      ctx.fillText('Image Generation Failed', 200, 160);
+      ctx.fillText('Check Console for Details', 200, 200);
       
-      // Draw a simple pixel art sad face
+      // Draw a simple pixel art sad face (larger)
       ctx.fillStyle = '#ff3333';
-      ctx.fillRect(90, 160, 20, 20); // Left eye
-      ctx.fillRect(150, 160, 20, 20); // Right eye
-      ctx.fillRect(90, 200, 80, 10); // Mouth
+      ctx.fillRect(140, 240, 30, 30); // Left eye
+      ctx.fillRect(230, 240, 30, 30); // Right eye
+      ctx.fillRect(140, 300, 120, 15); // Mouth
       
       // Set the canvas as fallback image
       setImageUrl(canvas.toDataURL());
@@ -323,7 +405,7 @@ export const Terminal = () => {
       </div>
             ))}
             <div className="text-lg mt-4 text-amber-300">
-              Note: Limited to 10 image generations per hour.
+              Note: Limited to 1 image generation per user. This limit helps us provide high-quality images to everyone.
             </div>
             
             {user && (
@@ -355,33 +437,40 @@ export const Terminal = () => {
           )}
           
           {imageUrl && !loading && (
-            <div className="mt-6 border border-white/20 p-5 bg-black/70 rounded pixel-effect pixel-border">
-              <div className="text-base text-gray-300 mb-3">Generated Image:</div>
-              <div className="flex flex-col items-center">
+            <div className="mt-6 border border-white/20 bg-black/70 rounded pixel-effect pixel-border w-full">
+              <div className="text-base text-gray-300 p-3 border-b border-white/10">Generated Image:</div>
+              <div className="flex flex-col items-center w-full p-4">
                 {imageError ? (
                   <div className="flex items-center justify-center text-rose-400 text-lg h-48">{imageError}</div>
                 ) : (
-                  <div className="relative w-full max-w-md mx-auto">
-                    <img 
-                      src={imageUrl} 
-                      alt={`Pixel art for: ${prompt}`}
-                      className="w-full object-contain rounded pixel-effect"
-                      style={{ 
-                        imageRendering: 'pixelated',
-                        minHeight: '240px',
-                        maxHeight: '360px'
+                  <div className="w-full max-w-2xl mx-auto">
+                    <div className="aspect-square relative overflow-hidden rounded-md" 
+                      style={{
+                        border: '2px solid rgba(0, 255, 255, 0.2)',
+                        boxShadow: '0 0 10px rgba(0, 255, 255, 0.1)'
                       }}
-                      onLoad={handleImageLoad}
-                      onError={handleImageError}
-                    />
+                    >
+                      <img 
+                        src={imageUrl} 
+                        alt={`Pixel art for: ${prompt}`}
+                        className="absolute inset-0 w-full h-full pixel-effect"
+                        style={{ 
+                          imageRendering: 'pixelated',
+                          objectFit: 'contain',
+                          backgroundColor: '#111'
+                        }}
+                        onLoad={handleImageLoad}
+                        onError={handleImageError}
+                      />
+                    </div>
                   </div>
                 )}
                 
                 {!imageError && isValidBase64Image(imageUrl) && !imageUrl.includes('text=Credit+Limit+Reached') && (
-                  <div className="flex justify-center space-x-6 mt-5 w-full">
+                  <div className="flex justify-center space-x-4 mt-4 w-full">
                     <button 
                       onClick={handleDownload}
-                      className="bg-black/70 hover:bg-black/90 p-3 rounded text-white border border-white/20 flex items-center gap-3"
+                      className="bg-black/70 hover:bg-black/90 p-2 rounded text-white border border-white/20 flex items-center gap-2"
                       title="Download image"
                       disabled={loading}
                     >
@@ -390,7 +479,7 @@ export const Terminal = () => {
                     </button>
                     <button 
                       onClick={handleOpenImage}
-                      className="bg-black/70 hover:bg-black/90 p-3 rounded text-white border border-white/20 flex items-center gap-3"
+                      className="bg-black/70 hover:bg-black/90 p-2 rounded text-white border border-white/20 flex items-center gap-2"
                       title="Open in new tab"
                       disabled={loading}
                     >
@@ -400,7 +489,7 @@ export const Terminal = () => {
                   </div>
                 )}
                 
-                <div className="text-base text-amber-300 mt-4 text-center w-full">
+                <div className="text-base text-amber-300 mt-3 text-center w-full">
                   Don't forget to save your pixel art!
                 </div>
               </div>
@@ -459,14 +548,36 @@ export const Terminal = () => {
             className="flex-1 bg-transparent text-white font-mono p-3 focus:outline-none pixel-effect text-2xl"
             disabled={loading}
             placeholder={loading ? 'Processing...' : 'Type a command...'}
+            onKeyDown={handleKeyDown}
           />
         </form>
+        
+        {/* Command Suggestions */}
+        {suggestions.length > 0 && (
+          <div className="bg-black/90 border border-white/10 rounded-md shadow-lg mt-1 overflow-hidden">
+            {suggestions.map((suggestion, index) => (
+              <div 
+                key={suggestion}
+                className={`px-3 py-2 font-mono text-base ${
+                  index === selectedSuggestion 
+                    ? 'bg-cyan-500/20 text-white' 
+                    : 'text-gray-300 hover:bg-black/60'
+                }`}
+                onClick={() => {
+                  if (suggestion === 'generate' && input.trim() !== 'generate') {
+                    setInput('generate ');
+                  } else {
+                    setInput(suggestion);
+                  }
+                  inputRef.current?.focus();
+                }}
+              >
+                {suggestion}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      <AuthModal 
-        show={showAuthModal} 
-        onClose={() => setShowAuthModal(false)} 
-      />
     </>
   );
 };
