@@ -1,3 +1,8 @@
+/**
+ * Terminal Component
+ * Interactive terminal UI for commanding the pixel art generation
+ * and handling user authentication flows.
+ */
 "use client"
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -6,16 +11,12 @@ import { generatePixelArt, downloadPixelArt } from '@/lib/retrodiffusion';
 import { Download, ExternalLink, History } from "lucide-react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import AuthModal from './auth-modal';
+import type { User } from "@supabase/supabase-js";
 
 interface RecentGeneration {
   prompt: string;
   imageUrl: string;
   timestamp: Date;
-}
-
-interface User {
-  id: string;
-  email?: string;
 }
 
 export const Terminal = () => {
