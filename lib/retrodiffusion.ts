@@ -8,6 +8,7 @@
 // Add this flag to prevent any automatic actions when the module is imported
 const AUTO_IMPORTED = true;
 let INITIALIZATION_COUNT = 0;
+let LAST_USER_INITIATED_CALL = 0;
 
 // DEBUG TRACKING: Add this to track when this module gets loaded and executed
 console.warn('⚠️ RetrodiffusionModule: Module loaded at', new Date().toISOString());
@@ -17,6 +18,27 @@ console.warn(`⚠️ RetrodiffusionModule: Initialization count: ${++INITIALIZAT
 if (INITIALIZATION_COUNT > 1) {
   console.error('🔴 RetrodiffusionModule: MULTIPLE INITIALIZATIONS DETECTED! This may cause excessive API calls.');
 }
+
+// Block any automatic or programmatic calls to the API
+const isAutomaticCall = () => {
+  // If this is called within 5 seconds of page load, it's likely automatic
+  const isWithin5SecondsOfPageLoad = typeof window !== 'undefined' && 
+    window.performance && 
+    (performance.now() < 5000);
+
+  // If user hasn't explicitly called this function before
+  const noUserInitiatedCallYet = LAST_USER_INITIATED_CALL === 0;
+  
+  // This call might be automatic/unwanted if:
+  return isWithin5SecondsOfPageLoad && noUserInitiatedCallYet;
+};
+
+// Function to mark a call as user-initiated
+// This should be called at the beginning of event handlers for user actions
+export const markUserAction = () => {
+  LAST_USER_INITIATED_CALL = Date.now();
+  console.log('User action marked at', new Date().toISOString());
+};
 
 // Types
 export interface GenerationResult {
@@ -95,6 +117,20 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
   
   // Add a callstack trace to help debug where the call is coming from
   console.warn('⚠️ RetrodiffusionModule: Call Stack:', new Error().stack);
+  
+  // CRITICAL: Detect and block automatic calls that weren't triggered by user interaction
+  if (isAutomaticCall()) {
+    console.error('🛑 BLOCKED: Automatic API call detected! This call was not triggered by a user action.');
+    return {
+      imageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUfAAANkyPdAAAATklEQVR42u3BAQ0AAADCIPunNsIVYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODfAEQSAAFrfHJ/AAAAAElFTkSuQmCC',
+      message: 'API call blocked: This appears to be an automatic call not triggered by user action. Please use the terminal to generate images.',
+      success: false,
+      prompt: prompt
+    };
+  }
+  
+  // Mark this as a user-initiated call for future reference
+  LAST_USER_INITIATED_CALL = Date.now();
   
   try {
     if (!prompt || prompt.trim() === '') {
@@ -185,17 +221,25 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
     try {
       // Call our secure API route instead of the RetoDiffusion API directly
       console.warn('⚠️ RetrodiffusionModule: Making API call to /api/generate');
+      const timestamp = Date.now();
+      
+      // Enhanced request with helpful debugging info
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Request-ID': requestId,
+          'X-User-Initiated': 'true', 
+          'X-Call-Time': timestamp.toString()
         },
         body: JSON.stringify({ 
           prompt,
+          timestamp, // Include timestamp for tracking
           cacheBuster: requestId // Include this to prevent browser caching
         })
       });
+
+      console.log(`API call took ${Date.now() - timestamp}ms to complete`);
 
       // Track the API request
       trackApiRequest();
@@ -212,6 +256,26 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
           const parseError = error as Error;
           console.error('Failed to parse JSON response:', parseError);
           console.error('Response text:', text.substring(0, 200));
+          
+          // Check for common RetroFusion API error patterns in the raw text
+          if (text.includes('credit limit') || text.includes('exceeded') || text.includes('rate limit')) {
+            return {
+              imageUrl: getPlaceholderImageForError(429),
+              message: 'You have reached the API credit limit. Please try again later.',
+              success: false,
+              prompt: prompt
+            };
+          }
+          
+          if (text.includes('unauthorized') || text.includes('authentication') || text.includes('forbidden')) {
+            return {
+              imageUrl: getPlaceholderImageForError(403),
+              message: 'API authorization failed. Please check your API key configuration.',
+              success: false,
+              prompt: prompt
+            };
+          }
+          
           throw new Error(`JSON parsing error: ${parseError.message}. Response was not valid JSON.`);
         }
       } catch (error) {

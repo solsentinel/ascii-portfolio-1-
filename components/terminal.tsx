@@ -7,7 +7,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { AsciiLogo } from './image-ascii-logo';
-import { generatePixelArt, downloadPixelArt } from '@/lib/retrodiffusion';
+import { generatePixelArt, downloadPixelArt, markUserAction } from '@/lib/retrodiffusion';
 import { Download, ExternalLink, History } from "lucide-react";
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import AuthModal from './auth-modal';
@@ -143,6 +143,9 @@ export const Terminal = () => {
 
   // Process generate command
   const handleGenerate = async (promptText: string) => {
+    // Mark this as a user-initiated action
+    markUserAction();
+
     // Prevent empty prompts
     if (!promptText || promptText.trim() === '') {
       setHistory(prev => [...prev, { 

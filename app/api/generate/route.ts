@@ -194,39 +194,59 @@ export async function POST(request: NextRequest) {
     // Log generation attempt with client IP (avoid logging full prompts in production)
     console.log(`Generation request from ${clientIp} - prompt length: ${sanitizedPrompt.length}`);
     
-    // Create API request payload according to documentation
+    // Create API request payload according to RetroFusion documentation
     const payload = {
-      model: "RD_FLUX",
+      model: "RD_FLUX", // The model name for pixel art generation
       width: 256,
       height: 256,
       prompt: sanitizedPrompt,
       num_images: 1,
       // Optional parameters
-      prompt_style: "default",
-      seed: Math.floor(Math.random() * 1000000) // Random seed for variety
+      prompt_style: "pixel_art", // Specifically request pixel art style
+      seed: Math.floor(Math.random() * 1000000), // Random seed for variety
+      negative_prompt: "blurry, low quality, distorted" // Common negative prompts for better quality
     };
+
+    console.log('Making API request to RetoDiffusion with payload:', {
+      promptLength: sanitizedPrompt.length,
+      modelName: payload.model,
+      dimensions: `${payload.width}x${payload.height}`,
+      endpoint: apiEndpoint ? apiEndpoint.substring(0, 30) + '...' : 'undefined',
+      hasApiKey: !!cleanedApiKey,
+      requestId
+    });
 
     // Make API request to RetoDiffusion
     try {
-      console.log('Making API request to RetoDiffusion with payload:', {
-        promptLength: sanitizedPrompt.length,
-        endpoint: apiEndpoint ? apiEndpoint.substring(0, 30) + '...' : 'undefined',
-        hasApiKey: !!cleanedApiKey,
-        requestId
-      });
-
+      // Ensure the API key format is correct per documentation
+      const apiKeyHeader = cleanedApiKey.startsWith('rdpk-') ? cleanedApiKey : `rdpk-${cleanedApiKey}`;
+      
       const response = await fetch(apiEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-RD-Token': cleanedApiKey, // Using cleaned API key
+          'X-RD-Token': apiKeyHeader, // Ensure proper format: rdpk-xxxx
           'Accept': 'application/json',
           'User-Agent': 'Promixel/1.0',
           'X-Request-ID': requestId // Pass through the request ID for tracing
         },
         body: JSON.stringify(payload)
       });
-      
+
+      // Log complete request details for debugging
+      console.log('API request details:', {
+        endpoint: apiEndpoint,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RD-Token': apiKeyHeader.substring(0, 10) + '...',
+          'Accept': 'application/json',
+          'User-Agent': 'Promixel/1.0',
+          'X-Request-ID': requestId
+        },
+        body: payload
+      });
+
       // Handle API response errors
       if (!response.ok) {
         // First try to get the response as text
@@ -249,7 +269,7 @@ export async function POST(request: NextRequest) {
         if (process.env.NODE_ENV !== 'production') {
           console.error('API error details:', {
             error: errorText.substring(0, 500), // Limit log size
-            apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
+            apiKeyFirstFiveChars: apiKeyHeader.substring(0, 5) // Log first 5 chars for debugging
           });
         }
         
