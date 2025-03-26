@@ -33,12 +33,18 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
 
     // Check for API key and endpoint
     const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY;
-    const apiEndpoint = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_ENDPOINT || 'https://api.retrodiffusion.ai/v1/images';
+    const apiEndpoint = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_ENDPOINT || 'https://api.retrodiffusion.ai/v1/inferences';
+    
+    console.log('Debug - Environment variables:', { 
+      hasApiKey: !!apiKey, 
+      keyLength: apiKey?.length || 0,
+      apiEndpoint 
+    });
 
     if (!apiKey) {
       console.error('Missing API key for Retro Diffusion');
       return {
-        imageUrl: '/placeholder-pixel-art.png', // Fallback to placeholder
+        imageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUAAACnej3aAAAAAXRSTlMAQObYZgAAADJJREFUaN7twTEBAAAAwiD7p14MH2AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4N8AKvgAAUFrhu4AAAAASUVORK5CYII=',
         message: 'API key not configured. Using placeholder image.',
         success: false,
         prompt: sanitizedPrompt
@@ -47,28 +53,35 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
 
     console.log('Generating with prompt:', sanitizedPrompt);
     
+    // Create API request payload according to latest documentation
+    const payload = {
+      model: "RD_FLUX", // RD_CLASSIC is no longer supported
+      width: 256,
+      height: 256,
+      prompt: sanitizedPrompt,
+      num_images: 1,
+      prompt_style: "default" // Optional style parameter
+    };
+    
+    console.log('Sending request with payload:', JSON.stringify(payload));
+    
     // Make API request
     const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey
+        'X-RD-Token': apiKey
       },
-      body: JSON.stringify({
-        prompt: sanitizedPrompt,
-        n: 1,
-        format: 'url'
-      })
+      body: JSON.stringify(payload)
     });
-
+    
     // Handle API response
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
       
-      // If rate limited, return a special message and placeholder
       if (response.status === 429) {
         return {
-          imageUrl: '/rate-limit-pixel-art.png', // Rate limit placeholder
+          imageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEX/AAAZ4gk3AAAAXklEQVR42u3BMQEAAADCIPunNsU+YAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA+A0mCAABQ2/jwwAAAABJRU5ErkJggg==',
           message: 'Credit limit reached. Try again later or upgrade your plan.',
           success: false,
           prompt: sanitizedPrompt
@@ -87,28 +100,39 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
       throw new Error('Invalid response from the API (JSON parsing failed)');
     }
 
+    // Expected response format based on documentation:
+    // {
+    //   "created_at": 1733425519,
+    //   "credit_cost": 1,
+    //   "base64_images": ["..."],
+    //   "model": "RDModel.RD_FLUX",
+    //   "type": "txt2img",
+    //   "remaining_credits": 999
+    // }
+    
     // Validate response data
-    if (!data || !data.images || !data.images[0]) {
+    if (!data || !data.base64_images || !data.base64_images[0]) {
       console.error('Invalid API response structure:', data);
       throw new Error('Invalid response from the API');
     }
 
-    // Determine if we have ASCII art in the response
-    const pixelArtAscii = data.pixelArtAscii || generatePlaceholderAsciiArt(sanitizedPrompt);
+    // Convert base64 image to URL
+    const imageUrl = `data:image/png;base64,${data.base64_images[0]}`;
+    const pixelArtAscii = generatePlaceholderAsciiArt(sanitizedPrompt);
 
     return {
-      imageUrl: data.images[0],
+      imageUrl: imageUrl,
       success: true,
       prompt: sanitizedPrompt,
       pixelArtAscii,
-      remainingCredits: data.remainingCredits
+      remainingCredits: data.remaining_credits
     };
   } catch (error) {
     console.error('Error generating pixel art:', error);
     
     // Return a more user-friendly error and fallback image
     return {
-      imageUrl: '/error-pixel-art.png', // Error placeholder 
+      imageUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEAAQMAAABmvDolAAAAA1BMVEUfAAANkyPdAAAATklEQVR42u3BAQ0AAADCIPunNsIVYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAODfAEQSAAFrfHJ/AAAAAElFTkSuQmCC',
       message: error instanceof Error 
         ? `Error: ${error.message}` 
         : 'An unknown error occurred while generating the image',

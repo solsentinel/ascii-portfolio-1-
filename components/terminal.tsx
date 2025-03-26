@@ -250,7 +250,35 @@ export const Terminal = () => {
   // Handle image load error
   const handleImageError = () => {
     console.error('Failed to load image from URL:', imageUrl);
-    setImageError('Failed to load image. The generated image data may be invalid.');
+    setImageError('Failed to load image. The generated image URL is invalid or not accessible.');
+    
+    // Create a fallback image with error message
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    
+    if (ctx) {
+      // Fill background
+      ctx.fillStyle = '#111';
+      ctx.fillRect(0, 0, 256, 256);
+      
+      // Add error message
+      ctx.fillStyle = '#ff3333';
+      ctx.font = '16px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Image Generation Failed', 128, 100);
+      ctx.fillText('Check Console for Details', 128, 130);
+      
+      // Draw a simple pixel art sad face
+      ctx.fillStyle = '#ff3333';
+      ctx.fillRect(90, 160, 20, 20); // Left eye
+      ctx.fillRect(150, 160, 20, 20); // Right eye
+      ctx.fillRect(90, 200, 80, 10); // Mouth
+      
+      // Set the canvas as fallback image
+      setImageUrl(canvas.toDataURL());
+    }
   };
 
   // Handle download button click
@@ -283,23 +311,23 @@ export const Terminal = () => {
       <div className="w-full max-w-4xl mx-auto h-full flex flex-col">
         <div 
           ref={terminalRef}
-          className="flex-1 bg-black/60 text-green-400 font-mono p-4 overflow-y-auto rounded-t-lg backdrop-blur-sm border border-white/10 pixel-effect pixel-border"
+          className="flex-1 bg-black/60 text-green-400 font-mono p-6 overflow-y-auto rounded-t-lg backdrop-blur-sm border border-white/10 pixel-effect pixel-border"
         >
           <AsciiLogo />
           
-          <div className="mb-4">
-            <div className="text-white font-bold mb-1 pixel-effect text-lg" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
+          <div className="mb-6">
+            <div className="text-white font-bold mb-3 pixel-effect text-2xl" style={{ fontFamily: "var(--font-pixel)" }}>Available commands:</div>
             {Object.entries(commands).map(([cmd, desc]) => (
-              <div key={cmd} className="text-sm ml-2 my-1">
-                <span className="text-cyan-400 font-bold pixel-effect text-base" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
+              <div key={cmd} className="text-lg ml-4 my-2">
+                <span className="text-cyan-400 font-bold pixel-effect text-xl" style={{ fontFamily: "var(--font-pixel)" }}>{cmd}</span> - <span className="text-gray-300">{desc}</span>
               </div>
             ))}
-            <div className="text-sm mt-2 text-amber-300">
+            <div className="text-lg mt-4 text-amber-300">
               Note: Limited to 10 image generations per hour.
             </div>
             
             {user && (
-              <div className="text-sm mt-2 text-emerald-400 pixel-effect">
+              <div className="text-lg mt-3 text-emerald-400 pixel-effect">
                 Logged in as: {user.email}
               </div>
             )}
@@ -308,10 +336,10 @@ export const Terminal = () => {
           {history.map((entry, i) => (
             <div 
               key={i} 
-              className={`whitespace-pre-wrap mb-2 ${
+              className={`whitespace-pre-wrap mb-3 ${
                 entry.type === 'error' ? 'text-rose-400' : 
                 entry.type === 'input' ? 'text-cyan-400' : 'text-emerald-300'
-              } ${entry.type === 'input' ? 'font-mono' : ''} text-base leading-relaxed`}
+              } ${entry.type === 'input' ? 'font-mono' : ''} text-xl leading-relaxed`}
               style={{ 
                 fontFamily: entry.type === 'input' ? 'var(--font-mono, monospace)' : 'var(--font-pixel)'
               }}
@@ -321,17 +349,17 @@ export const Terminal = () => {
           ))}
           
           {loading && (
-            <div className="text-amber-300 animate-pulse text-base" style={{ fontFamily: "var(--font-pixel)" }}>
+            <div className="text-amber-300 animate-pulse text-xl my-3" style={{ fontFamily: "var(--font-pixel)" }}>
               Processing...
             </div>
           )}
           
           {imageUrl && !loading && (
-            <div className="mt-4 border border-white/20 p-3 bg-black/70 rounded pixel-effect pixel-border">
-              <div className="text-xs text-gray-300 mb-2">Generated Image:</div>
+            <div className="mt-6 border border-white/20 p-5 bg-black/70 rounded pixel-effect pixel-border">
+              <div className="text-base text-gray-300 mb-3">Generated Image:</div>
               <div className="flex flex-col items-center">
                 {imageError ? (
-                  <div className="flex items-center justify-center text-rose-400 text-sm h-48">{imageError}</div>
+                  <div className="flex items-center justify-center text-rose-400 text-lg h-48">{imageError}</div>
                 ) : (
                   <div className="relative w-full max-w-md mx-auto">
                     <img 
@@ -350,29 +378,29 @@ export const Terminal = () => {
                 )}
                 
                 {!imageError && isValidBase64Image(imageUrl) && !imageUrl.includes('text=Credit+Limit+Reached') && (
-                  <div className="flex justify-center space-x-4 mt-4 w-full">
+                  <div className="flex justify-center space-x-6 mt-5 w-full">
                     <button 
                       onClick={handleDownload}
-                      className="bg-black/70 hover:bg-black/90 p-2 rounded text-white border border-white/20 flex items-center gap-2"
+                      className="bg-black/70 hover:bg-black/90 p-3 rounded text-white border border-white/20 flex items-center gap-3"
                       title="Download image"
                       disabled={loading}
                     >
-                      <Download className="w-4 h-4" />
-                      <span className="text-xs font-mono">Download</span>
+                      <Download className="w-5 h-5" />
+                      <span className="text-base font-mono">Download</span>
                     </button>
                     <button 
                       onClick={handleOpenImage}
-                      className="bg-black/70 hover:bg-black/90 p-2 rounded text-white border border-white/20 flex items-center gap-2"
+                      className="bg-black/70 hover:bg-black/90 p-3 rounded text-white border border-white/20 flex items-center gap-3"
                       title="Open in new tab"
                       disabled={loading}
                     >
-                      <ExternalLink className="w-4 h-4" />
-                      <span className="text-xs font-mono">View Full</span>
+                      <ExternalLink className="w-5 h-5" />
+                      <span className="text-base font-mono">View Full</span>
                     </button>
                   </div>
                 )}
                 
-                <div className="text-xs text-amber-300 mt-3 text-center w-full">
+                <div className="text-base text-amber-300 mt-4 text-center w-full">
                   Don't forget to save your pixel art!
                 </div>
               </div>
@@ -381,12 +409,12 @@ export const Terminal = () => {
 
           {/* Recent Generations Section */}
           {showRecent && recentGenerations.length > 0 && (
-            <div className="mt-6 border border-white/20 p-3 bg-black/70 rounded pixel-effect pixel-border">
-              <div className="flex items-center gap-2 mb-3">
-                <History className="w-4 h-4 text-cyan-400" />
-                <div className="text-cyan-400 text-sm font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>Recent Generations:</div>
+            <div className="mt-8 border border-white/20 p-5 bg-black/70 rounded pixel-effect pixel-border">
+              <div className="flex items-center gap-3 mb-4">
+                <History className="w-6 h-6 text-cyan-400" />
+                <div className="text-cyan-400 text-lg font-bold pixel-effect" style={{ fontFamily: "var(--font-pixel)" }}>Recent Generations:</div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 {recentGenerations.map((gen, index) => (
                   <div key={index} className="border border-white/10 bg-black/50 rounded-md overflow-hidden">
                     <div className="aspect-square relative">
@@ -397,15 +425,15 @@ export const Terminal = () => {
                         style={{ imageRendering: 'pixelated' }}
                       />
                     </div>
-                    <div className="p-2">
-                      <div className="text-xs text-cyan-200 truncate" title={gen.prompt}>
+                    <div className="p-3">
+                      <div className="text-sm text-cyan-200 truncate" title={gen.prompt}>
                         {gen.prompt}
                       </div>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-gray-400 text-xs">{formatTimestamp(gen.timestamp)}</span>
+                      <div className="flex justify-between items-center mt-2">
+                        <span className="text-gray-400 text-sm">{formatTimestamp(gen.timestamp)}</span>
                         <button 
                           onClick={() => window.open(gen.imageUrl, '_blank')}
-                          className="text-xs bg-black/70 hover:bg-black/90 px-2 py-0.5 rounded text-white"
+                          className="text-sm bg-black/70 hover:bg-black/90 px-3 py-1 rounded text-white"
                         >
                           View
                         </button>
@@ -422,13 +450,13 @@ export const Terminal = () => {
           onSubmit={handleSubmit} 
           className="flex bg-black/80 rounded-b-lg overflow-hidden border-x border-b border-white/10 pixel-effect"
         >
-          <span className="p-2 text-cyan-400 font-mono text-lg">$</span>
+          <span className="p-3 text-cyan-400 font-mono text-2xl">$</span>
           <input
             ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 bg-transparent text-white font-mono p-2 focus:outline-none pixel-effect text-lg"
+            className="flex-1 bg-transparent text-white font-mono p-3 focus:outline-none pixel-effect text-2xl"
             disabled={loading}
             placeholder={loading ? 'Processing...' : 'Type a command...'}
           />

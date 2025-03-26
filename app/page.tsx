@@ -6,6 +6,7 @@ import Terminal from '@/components/terminal';
 import BootSequence from '@/components/boot-sequence';
 import PixelGallery from '@/components/pixel-gallery';
 import Testimonials from '@/components/testimonials';
+import Roadmap from '@/components/roadmap';
 import CrtToggle from '@/components/crt-toggle';
 
 function ErrorFallback({ error, resetErrorBoundary }: { error: Error, resetErrorBoundary: () => void }) {
@@ -80,6 +81,7 @@ export default function Home() {
               <div className="w-full max-w-6xl mx-auto mt-12 space-y-16">
                 <PixelGallery />
                 <Testimonials />
+                <Roadmap />
                 <div className="pb-10" />
               </div>
             </div>
