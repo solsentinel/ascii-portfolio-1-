@@ -200,15 +200,32 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
       // Track the API request
       trackApiRequest();
 
-      // Parse the API response
-      const result = await response.json();
-      
+      // Parse the API response with better error handling
+      let result;
+      try {
+        const text = await response.text();
+        console.log('API response raw text:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));
+        
+        try {
+          result = JSON.parse(text);
+        } catch (error) {
+          const parseError = error as Error;
+          console.error('Failed to parse JSON response:', parseError);
+          console.error('Response text:', text.substring(0, 200));
+          throw new Error(`JSON parsing error: ${parseError.message}. Response was not valid JSON.`);
+        }
+      } catch (error) {
+        const responseError = error as Error;
+        console.error('Error reading response:', responseError);
+        throw new Error('Failed to read API response');
+      }
+
       if (!response.ok) {
         // If there was an error, send back the error message
         delete pendingRequests[normalizedPrompt]; // Clear pending flag
         return {
           imageUrl: getPlaceholderImageForError(response.status),
-          message: result.message || 'Error generating image',
+          message: result?.message || `Error: HTTP status ${response.status}`,
           success: false,
           prompt: prompt
         };

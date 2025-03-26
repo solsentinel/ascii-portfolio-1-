@@ -207,106 +207,145 @@ export async function POST(request: NextRequest) {
     };
 
     // Make API request to RetoDiffusion
-    const response = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-RD-Token': cleanedApiKey, // Using cleaned API key
-        'Accept': 'application/json',
-        'User-Agent': 'Promixel/1.0',
-        'X-Request-ID': requestId // Pass through the request ID for tracing
-      },
-      body: JSON.stringify(payload)
-    });
-    
-    // Handle API response errors
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API error:', {
-        status: response.status,
-        message: response.statusText,
-        clientIp
+    try {
+      console.log('Making API request to RetoDiffusion with payload:', {
+        promptLength: sanitizedPrompt.length,
+        endpoint: apiEndpoint ? apiEndpoint.substring(0, 30) + '...' : 'undefined',
+        hasApiKey: !!cleanedApiKey,
+        requestId
+      });
+
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RD-Token': cleanedApiKey, // Using cleaned API key
+          'Accept': 'application/json',
+          'User-Agent': 'Promixel/1.0',
+          'X-Request-ID': requestId // Pass through the request ID for tracing
+        },
+        body: JSON.stringify(payload)
       });
       
-      // Only log detailed error info in non-production environments
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('API error details:', {
-          error: errorText,
-          apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
+      // Handle API response errors
+      if (!response.ok) {
+        // First try to get the response as text
+        let errorText = '';
+        try {
+          errorText = await response.text();
+          console.error('API error response text:', errorText.substring(0, 200));
+        } catch (e) {
+          console.error('Failed to get error response text:', e);
+          errorText = 'No error text available';
+        }
+        
+        console.error('API error:', {
+          status: response.status,
+          message: response.statusText,
+          clientIp
         });
-      }
-      
-      // Handle specific error cases
-      if (response.status === 429) {
+        
+        // Only log detailed error info in non-production environments
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('API error details:', {
+            error: errorText.substring(0, 500), // Limit log size
+            apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
+          });
+        }
+        
+        // Handle specific error cases
+        if (response.status === 429) {
+          return NextResponse.json({ 
+            success: false, 
+            message: 'Credit limit reached. Try again later or upgrade your plan.' 
+          }, { status: 429 });
+        }
+        
+        if (response.status === 403) {
+          return NextResponse.json({ 
+            success: false, 
+            message: 'Authentication failed. Please verify your API key is valid and active.' 
+          }, { status: 403 });
+        }
+        
+        if (response.status === 401) {
+          return NextResponse.json({ 
+            success: false, 
+            message: 'Invalid API key. Please check your configuration.' 
+          }, { status: 401 });
+        }
+        
         return NextResponse.json({ 
           success: false, 
-          message: 'Credit limit reached. Try again later or upgrade your plan.' 
-        }, { status: 429 });
+          message: `API error: ${response.status}` // Don't expose detailed error info to clients
+        }, { status: response.status });
       }
-      
-      if (response.status === 403) {
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Authentication failed. Please verify your API key is valid and active.' 
-        }, { status: 403 });
-      }
-      
-      if (response.status === 401) {
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Invalid API key. Please check your configuration.' 
-        }, { status: 401 });
-      }
-      
-      return NextResponse.json({ 
-        success: false, 
-        message: `API error: ${response.status}` // Don't expose detailed error info to clients
-      }, { status: response.status });
-    }
 
-    // Parse the response
-    let data;
-    try {
-      data = await response.json();
-    } catch (err) {
-      console.error('Failed to parse API response:', err);
+      // Parse the response
+      let data;
+      let responseText = '';
+      try {
+        // First get the raw text to help with debugging
+        responseText = await response.text();
+        console.log('Received API response, length:', responseText.length);
+        
+        // Then parse it as JSON
+        try {
+          data = JSON.parse(responseText);
+        } catch (e) {
+          console.error('Failed to parse API response as JSON:', e);
+          console.error('Response text (first 500 chars):', responseText.substring(0, 500));
+          return NextResponse.json({ 
+            success: false, 
+            message: 'Invalid JSON response from the API' 
+          }, { status: 500 });
+        }
+      } catch (err) {
+        console.error('Failed to read API response:', err);
+        return NextResponse.json({ 
+          success: false, 
+          message: 'Failed to read response from the API' 
+        }, { status: 500 });
+      }
+
+      // Validate response data
+      if (!data || !data.base64_images || !data.base64_images[0]) {
+        console.error('Invalid API response structure');
+        return NextResponse.json({ 
+          success: false, 
+          message: 'Invalid response from the API' 
+        }, { status: 500 });
+      }
+
+      // Return the image data with success
+      const response_data = {
+        success: true,
+        imageUrl: `data:image/png;base64,${data.base64_images[0]}`,
+        prompt: sanitizedPrompt,
+        remainingCredits: data.remaining_credits
+      };
+
+      const finalResponse = NextResponse.json(response_data);
+      
+      // Add security headers and CORS headers to the success response
+      finalResponse.headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; script-src 'self'");
+      finalResponse.headers.set('X-Content-Type-Options', 'nosniff');
+      finalResponse.headers.set('X-Frame-Options', 'DENY');
+      finalResponse.headers.set('X-XSS-Protection', '1; mode=block');
+      finalResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+      finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+      finalResponse.headers.set('Access-Control-Allow-Origin', origin || '*');
+      finalResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      finalResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Request-ID');
+      
+      return finalResponse;
+    } catch (fetchError) {
+      console.error('Fetch error when calling RetoDiffusion API:', fetchError);
       return NextResponse.json({ 
         success: false, 
-        message: 'Invalid response from the API' 
+        message: 'Network error when connecting to the image generation API' 
       }, { status: 500 });
     }
-    
-    // Validate response data
-    if (!data || !data.base64_images || !data.base64_images[0]) {
-      console.error('Invalid API response structure');
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Invalid response from the API' 
-      }, { status: 500 });
-    }
-
-    // Return the image data with success
-    const response_data = {
-      success: true,
-      imageUrl: `data:image/png;base64,${data.base64_images[0]}`,
-      prompt: sanitizedPrompt,
-      remainingCredits: data.remaining_credits
-    };
-
-    const finalResponse = NextResponse.json(response_data);
-    
-    // Add security headers and CORS headers to the success response
-    finalResponse.headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; script-src 'self'");
-    finalResponse.headers.set('X-Content-Type-Options', 'nosniff');
-    finalResponse.headers.set('X-Frame-Options', 'DENY');
-    finalResponse.headers.set('X-XSS-Protection', '1; mode=block');
-    finalResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    finalResponse.headers.set('Access-Control-Allow-Origin', origin || '*');
-    finalResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    finalResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Request-ID');
-    
-    return finalResponse;
   } catch (error) {
     console.error('Error generating pixel art:', error);
     
