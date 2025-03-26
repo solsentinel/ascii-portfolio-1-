@@ -1,134 +1,185 @@
-// RetroFusion API integration
-// This is a placeholder for the actual API integration
+/**
+ * Retro Diffusion API Client
+ * Functions for generating and downloading pixel art
+ */
 
-export interface PixelArtResponse {
+// Types
+export interface GenerationResult {
   imageUrl: string;
-  pixelArtAscii?: string;
-  prompt?: string;
   message?: string;
+  success: boolean;
+  prompt?: string;
+  pixelArtAscii?: string;
   remainingCredits?: number;
-  error?: string;
 }
 
-// Sanitize prompt before sending to API
-function sanitizePrompt(prompt: string): string {
-  if (!prompt) return '';
-  
-  // Remove any HTML tags that could be used for XSS
-  const sanitized = prompt
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
-    
-  // Trim and limit length
-  return sanitized.trim().substring(0, 1000);
-}
-
-export async function generatePixelArt(prompt: string): Promise<PixelArtResponse> {
-  console.log(`Generating pixel art for prompt: "${prompt}"`);
-
-  if (!prompt || prompt.trim() === '') {
-    return {
-      imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Empty+Prompt',
-      message: 'Please provide a prompt',
-      prompt: '',
-    };
-  }
-
-  // Sanitize the prompt
-  const sanitizedPrompt = sanitizePrompt(prompt);
-
+/**
+ * Generate pixel art using the Retro Diffusion API
+ * @param prompt Text prompt to generate pixel art from
+ * @returns Object containing the image URL and any messages
+ */
+export const generatePixelArt = async (prompt: string): Promise<GenerationResult> => {
   try {
-    const response = await fetch('/api/retrodiffusion', {
+    if (!prompt || prompt.trim() === '') {
+      return {
+        imageUrl: '',
+        message: 'Please provide a prompt to generate an image',
+        success: false
+      };
+    }
+
+    // Sanitize the prompt
+    const sanitizedPrompt = sanitizePrompt(prompt);
+
+    // Check for API key and endpoint
+    const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY;
+    const apiEndpoint = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_ENDPOINT || 'https://api.retrodiffusion.ai/v1/images';
+
+    if (!apiKey) {
+      console.error('Missing API key for Retro Diffusion');
+      return {
+        imageUrl: '/placeholder-pixel-art.png', // Fallback to placeholder
+        message: 'API key not configured. Using placeholder image.',
+        success: false,
+        prompt: sanitizedPrompt
+      };
+    }
+
+    console.log('Generating with prompt:', sanitizedPrompt);
+    
+    // Make API request
+    const response = await fetch(apiEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-api-key': apiKey
       },
-      body: JSON.stringify({ prompt: sanitizedPrompt }),
+      body: JSON.stringify({
+        prompt: sanitizedPrompt,
+        n: 1,
+        format: 'url'
+      })
     });
 
+    // Handle API response
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Failed to generate pixel art:', { 
-        status: response.status, 
-        statusText: response.statusText,
-        response: errorText
-      });
+      const errorText = await response.text().catch(() => 'Unknown error');
       
-      let errorMessage = `Error: ${response.status} ${response.statusText}`;
-      try {
-        const errorData = JSON.parse(errorText);
-        if (errorData.message) {
-          errorMessage = errorData.message;
-        }
-      } catch (e) {
-        // If we can't parse the error as JSON, use the status text
+      // If rate limited, return a special message and placeholder
+      if (response.status === 429) {
+        return {
+          imageUrl: '/rate-limit-pixel-art.png', // Rate limit placeholder
+          message: 'Credit limit reached. Try again later or upgrade your plan.',
+          success: false,
+          prompt: sanitizedPrompt
+        };
       }
       
-      return {
-        imageUrl: `https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Error:+${response.status}`,
-        message: errorMessage,
-        prompt: sanitizedPrompt,
-      };
+      console.error('API error:', response.status, errorText);
+      throw new Error(`API returned ${response.status}: ${errorText}`);
     }
 
-    const data = await response.json();
-    
-    // Log the response structure for debugging
-    console.log('Pixel art generation response:', {
-      hasImageUrl: !!data.imageUrl,
-      imageUrlLength: data.imageUrl ? data.imageUrl.length : 0,
-      keys: Object.keys(data)
-    });
-
-    if (!data.imageUrl) {
-      console.error('Missing imageUrl in API response');
-      return {
-        imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Missing+Image+URL',
-        message: 'API response did not include an image URL',
-        prompt: sanitizedPrompt,
-      };
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      console.error('Error parsing API response:', e);
+      throw new Error('Invalid response from the API (JSON parsing failed)');
     }
 
-    // Validate that the imageUrl is a valid base64 image
-    if (data.imageUrl.startsWith('data:image')) {
-      const base64Part = data.imageUrl.split(',')[1];
-      if (base64Part) {
-        try {
-          // This will throw an error if the base64 is invalid
-          atob(base64Part);
-        } catch (e) {
-          console.error('Invalid base64 in image URL:', e);
-          return {
-            imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Invalid+Image+Data',
-            message: 'The image data received was invalid',
-            prompt: sanitizedPrompt,
-          };
-        }
-      }
+    // Validate response data
+    if (!data || !data.images || !data.images[0]) {
+      console.error('Invalid API response structure:', data);
+      throw new Error('Invalid response from the API');
     }
+
+    // Determine if we have ASCII art in the response
+    const pixelArtAscii = data.pixelArtAscii || generatePlaceholderAsciiArt(sanitizedPrompt);
 
     return {
-      imageUrl: data.imageUrl,
-      pixelArtAscii: data.pixelArtAscii || '',
-      prompt: data.prompt || sanitizedPrompt,
-      message: data.message,
-      remainingCredits: data.remainingCredits,
+      imageUrl: data.images[0],
+      success: true,
+      prompt: sanitizedPrompt,
+      pixelArtAscii,
+      remainingCredits: data.remainingCredits
     };
   } catch (error) {
     console.error('Error generating pixel art:', error);
+    
+    // Return a more user-friendly error and fallback image
     return {
-      imageUrl: 'https://via.placeholder.com/256x256/1a1a1a/ffffff?text=Error',
-      message: error instanceof Error ? error.message : 'Failed to generate pixel art',
-      prompt: sanitizedPrompt,
+      imageUrl: '/error-pixel-art.png', // Error placeholder 
+      message: error instanceof Error 
+        ? `Error: ${error.message}` 
+        : 'An unknown error occurred while generating the image',
+      success: false,
+      prompt: prompt
     };
   }
+};
+
+/**
+ * Download an image from a URL
+ * @param url URL of the image to download
+ * @param filename Name to save the file as
+ */
+export const downloadPixelArt = async (url: string, filename: string): Promise<void> => {
+  try {
+    if (!url) {
+      throw new Error('No image URL provided for download');
+    }
+    
+    // For data URLs, we can download directly
+    if (url.startsWith('data:')) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+    
+    // For remote URLs, we need to fetch first
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // Clean up
+    URL.revokeObjectURL(objectUrl);
+  } catch (error) {
+    console.error('Error downloading image:', error);
+    throw new Error('Failed to download the image');
+  }
+};
+
+/**
+ * Sanitize a user prompt to prevent injection attacks
+ * @param prompt The prompt to sanitize
+ * @returns A sanitized version of the prompt
+ */
+function sanitizePrompt(prompt: string): string {
+  if (!prompt) return '';
+  
+  // Remove any HTML tags
+  let sanitized = prompt.replace(/<[^>]*>/g, '');
+  
+  // Limit length
+  return sanitized.trim().substring(0, 1000);
 }
 
-// Function to generate placeholder ASCII art
+/**
+ * Generate placeholder ASCII art
+ * @param prompt The prompt used to seed the ASCII art pattern
+ * @returns A string containing ASCII art
+ */
 function generatePlaceholderAsciiArt(prompt: string): string {
   if (!prompt) {
     return "";
@@ -184,40 +235,4 @@ function generatePlaceholderAsciiArt(prompt: string): string {
   const promptLength = prompt?.length || 0;
   const index = Math.floor(promptLength % patterns.length);
   return patterns[index];
-}
-
-// Function to download the generated image
-export async function downloadPixelArt(imageUrl: string, filename = 'pixel-art.png'): Promise<void> {
-  if (!imageUrl) {
-    console.error('No image URL provided for download');
-    throw new Error('No image URL provided for download');
-  }
-
-  try {
-    // For data URLs, we can directly create a download link
-    if (imageUrl.startsWith('data:')) {
-      const link = document.createElement('a');
-      link.href = imageUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      return;
-    }
-
-    // For remote URLs, we need to fetch the image first
-    const response = await fetch(imageUrl);
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error('Error downloading pixel art:', error);
-    throw new Error('Failed to download image');
-  }
 } 
