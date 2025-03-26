@@ -47,15 +47,10 @@ export async function POST(request: NextRequest) {
       width: 256,
       height: 256,
       prompt: sanitizedPrompt,
-      num_inference_steps: 20,
-      guidance_scale: 7.5,
-      negative_prompt: "",
-      scheduler: "DDIM",
       num_images: 1,
-      seed: Math.floor(Math.random() * 1000000), // Random seed for variety
-      safety_check: true,
-      enhance_prompt: true,
-      self_attention: true
+      // Optional parameters
+      prompt_style: "default",
+      seed: Math.floor(Math.random() * 1000000) // Random seed for variety
     };
 
     // Log the request details (excluding sensitive data)
@@ -67,9 +62,8 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`, // Changed to Bearer token format
-        'Accept': 'application/json',
-        'User-Agent': 'Promixel/1.0'
+        'X-RD-Token': apiKey, // Changed to X-RD-Token as per documentation
+        'Accept': 'application/json'
       },
       body: JSON.stringify(payload)
     });
