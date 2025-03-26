@@ -181,7 +181,8 @@ function generatePlaceholderAsciiArt(prompt: string): string {
   ];
   
   // Pick a pattern based on the prompt (just for demonstration)
-  const index = Math.floor(prompt.length % patterns.length);
+  const promptLength = prompt?.length || 0;
+  const index = Math.floor(promptLength % patterns.length);
   return patterns[index];
 }
 

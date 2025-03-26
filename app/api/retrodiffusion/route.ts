@@ -248,6 +248,8 @@ function generatePlaceholderAsciiArt(prompt: string): string {
     `
   ];
   
-  const index = Math.floor(prompt.length % patterns.length);
+  // Fix: Safely access prompt.length, defaulting to 0 if prompt is null or undefined
+  const promptLength = prompt?.length || 0;
+  const index = Math.floor(promptLength % patterns.length);
   return patterns[index];
 } 
