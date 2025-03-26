@@ -42,6 +42,9 @@ export default function Home() {
   const [content, setContent] = useState<React.ReactNode | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [lastGenerationTime, setLastGenerationTime] = useState<number>(0);
+  const MIN_GENERATION_INTERVAL = 3000; // 3 seconds between generations
   const supabase = createClientComponentClient();
 
   // Check authentication status on mount
@@ -165,6 +168,34 @@ export default function Home() {
       }
     }
   }, [booting, error, user, showAuthModal, supabase.auth]);
+
+  const handleGenerate = async () => {
+    // Prevent multiple clicks
+    if (isGenerating) {
+      console.log("Generation already in progress, please wait");
+      return;
+    }
+    
+    // Check if we need to throttle based on time since last generation
+    const now = Date.now();
+    if (now - lastGenerationTime < MIN_GENERATION_INTERVAL) {
+      console.log(`Please wait ${Math.ceil((MIN_GENERATION_INTERVAL - (now - lastGenerationTime)) / 1000)} seconds before generating again`);
+      return;
+    }
+    
+    try {
+      setIsGenerating(true);
+      setLastGenerationTime(now);
+      
+      // Original generation code here
+      // ...
+      
+    } catch (error) {
+      console.error("Generation failed:", error);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   if (error) {
     return <ErrorFallback error={error} resetErrorBoundary={() => {

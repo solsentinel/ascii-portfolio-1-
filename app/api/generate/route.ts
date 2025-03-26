@@ -3,6 +3,40 @@ import { NextRequest, NextResponse } from 'next/server';
 // Maximum prompt length for security
 const MAX_PROMPT_LENGTH = 1000;
 
+// In-memory request tracking to prevent duplicates
+// Will reset on server restart, but helps during active sessions
+// Key is requestId+prompt hash, value is timestamp of processing
+const processedRequests = new Map<string, number>();
+const DUPLICATE_REQUEST_WINDOW = 10 * 1000; // 10 seconds window to detect duplicates
+
+// Clean up old entries periodically to prevent memory leaks
+const cleanupProcessedRequests = () => {
+  const now = Date.now();
+  for (const [key, timestamp] of processedRequests.entries()) {
+    if (now - timestamp > DUPLICATE_REQUEST_WINDOW) {
+      processedRequests.delete(key);
+    }
+  }
+};
+
+// Setup periodic cleanup (every 5 minutes)
+if (typeof setInterval !== 'undefined') {
+  setInterval(cleanupProcessedRequests, 5 * 60 * 1000);
+}
+
+// Create a hash for request deduplication
+function createRequestHash(requestId: string, prompt: string): string {
+  // Simple hash function for strings
+  let hash = 0;
+  const str = `${requestId}:${prompt}`;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString();
+}
+
 // Validate that the input is safe and meets requirements
 function validateRequest(prompt: string): { valid: boolean; error?: string } {
   if (!prompt) {
@@ -38,6 +72,11 @@ function validateRequest(prompt: string): { valid: boolean; error?: string } {
 
 export async function POST(request: NextRequest) {
   try {
+    // Run a cleanup on each request (1% chance to reduce overhead)
+    if (Math.random() < 0.01) {
+      cleanupProcessedRequests();
+    }
+
     // Validate request origin (simple CORS check)
     const origin = request.headers.get('origin') || '';
     const allowedOrigins = [
@@ -64,6 +103,9 @@ export async function POST(request: NextRequest) {
                     request.headers.get('x-real-ip') || 
                     'unknown';
     
+    // Get unique request ID to detect duplicates
+    const requestId = request.headers.get('x-request-id') || crypto.randomUUID();
+    
     // Parse request with proper error handling
     let requestData;
     try {
@@ -75,7 +117,27 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { prompt } = requestData;
+    const { prompt, cacheBuster } = requestData;
+    
+    // Check for duplicate requests (same request ID and prompt within time window)
+    const requestHash = createRequestHash(requestId, prompt);
+    
+    if (processedRequests.has(requestHash)) {
+      const timestamp = processedRequests.get(requestHash);
+      if (timestamp && Date.now() - timestamp < DUPLICATE_REQUEST_WINDOW) {
+        console.warn(`Detected duplicate request: ${requestHash} from ${clientIp}`);
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'Duplicate request detected. Please wait before retrying.' 
+          },
+          { status: 429 }
+        );
+      }
+    }
+    
+    // Mark this request as being processed to prevent duplicates
+    processedRequests.set(requestHash, Date.now());
     
     // Validate prompt
     const validation = validateRequest(prompt);
@@ -140,7 +202,7 @@ export async function POST(request: NextRequest) {
         'X-RD-Token': cleanedApiKey, // Using cleaned API key
         'Accept': 'application/json',
         'User-Agent': 'Promixel/1.0',
-        'X-Request-ID': crypto.randomUUID() // Add request ID for tracing
+        'X-Request-ID': requestId // Pass through the request ID for tracing
       },
       body: JSON.stringify(payload)
     });

@@ -141,6 +141,99 @@ export const Terminal = () => {
     }
   };
 
+  // Process generate command
+  const handleGenerate = async (promptText: string) => {
+    // Prevent empty prompts
+    if (!promptText || promptText.trim() === '') {
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'Please provide a prompt to generate an image.' 
+      }]);
+      return;
+    }
+    
+    // Don't allow generation if already loading
+    if (loading) {
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'Already generating an image. Please wait for the current generation to complete.' 
+      }]);
+      return;
+    }
+
+    // Check if user is logged in
+    if (!user) {
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'You need to log in before generating images. Please use the login button at the top left corner.' 
+      }]);
+      return;
+    }
+    
+    // Check if the user has already generated an image (non-premium users)
+    if (hasGeneratedImage && (!user?.email?.includes('@premium') && !user?.email?.includes('@admin'))) {
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'You have reached your image generation limit. Premium users can generate unlimited images.' 
+      }]);
+      return;
+    }
+    
+    // Set loading state and update UI
+    setLoading(true);
+    setImageError('');
+    setHistory(prev => [...prev, { 
+      type: 'output', 
+      content: `Generating pixel art for: "${promptText}"...\nThis may take a few seconds.` 
+    }]);
+    
+    try {
+      // Generate the image
+      const result = await generatePixelArt(promptText);
+      
+      if (result.success && result.imageUrl) {
+        // Update state on success
+        setImageUrl(result.imageUrl);
+        setPrompt(promptText);
+        setHistory(prev => [...prev, { 
+          type: 'output', 
+          content: result.pixelArtAscii || 'Pixel art generated successfully!' 
+        }]);
+        
+        // Track that the user has generated an image
+        if (!hasGeneratedImage) {
+          localStorage.setItem(`promixel_generated_${user.id}`, 'true');
+          setHasGeneratedImage(true);
+        }
+        
+        // Add to recent generations
+        const newGeneration = {
+          prompt: promptText,
+          imageUrl: result.imageUrl,
+          timestamp: new Date()
+        };
+        setRecentGenerations(prev => [newGeneration, ...prev].slice(0, 10));
+      } else {
+        // Handle generation error
+        setImageError(result.message || 'Failed to generate image');
+        setHistory(prev => [...prev, { 
+          type: 'error', 
+          content: result.message || 'Failed to generate image' 
+        }]);
+      }
+    } catch (error) {
+      // Handle unexpected errors
+      console.error('Error generating image:', error);
+      setImageError('An unexpected error occurred');
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'An unexpected error occurred while generating the image' 
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,110 +292,21 @@ export const Terminal = () => {
       setShowRecent(!showRecent);
       setHistory(prev => [...prev, { 
         type: 'output', 
-        content: showRecent ? 'Recent generations hidden.' : 'Showing recent generations.'
+        content: showRecent ? 'Recent generations hidden.' : 'Showing recent generations.' 
       }]);
       return;
     }
-    
+
     if (command.startsWith('generate ')) {
-      // Check if user is authenticated
-      if (!user) {
-        setHistory(prev => [...prev, { 
-          type: 'error', 
-          content: 'Error: You need to log in to generate images. Type "login" to sign in or create an account.' 
-        }]);
-        return;
-      }
-      
-      if (hasGeneratedImage) {
-        setHistory(prev => [...prev, { 
-          type: 'error', 
-          content: 'Error: You have reached your generation limit. Each user can only generate 1 image.' 
-        }]);
-        return;
-      }
-      
-      const newPrompt = command.substring('generate '.length).trim();
-      if (!newPrompt) {
-        setHistory(prev => [...prev, { 
-          type: 'error', 
-          content: 'Error: Please provide a prompt for the image.' 
-        }]);
-        return;
-      }
-      
-      setPrompt(newPrompt);
-      setLoading(true);
-      setImageUrl('');
-      setImageError('');
-      
-      try {
-        setHistory(prev => [...prev, { 
-          type: 'output', 
-          content: `Generating pixel art for: "${newPrompt}"... This may take a few seconds.` 
-        }]);
-        
-        const result = await generatePixelArt(newPrompt);
-        
-        // Check for any errors first
-        if (!result.success) {
-          setHistory(prev => [...prev, { 
-            type: 'error', 
-            content: result.message || 'An error occurred while generating the image.'
-          }]);
-          
-          // If there's an image URL despite the error (e.g., placeholder image), still show it
-          if (result.imageUrl) {
-            setImageUrl(result.imageUrl);
-          }
-          
-          return; // Exit early on error - don't show success message
-        }
-        
-        // Only show success message and set imageUrl on successful generation
-        if (result.imageUrl) {
-          setImageUrl(result.imageUrl);
-          
-          // Add to recent generations
-          setRecentGenerations(prev => {
-            // Limit to 6 most recent
-            const newGenerations = [
-              { prompt: newPrompt, imageUrl: result.imageUrl, timestamp: new Date() },
-              ...prev
-            ].slice(0, 6);
-            return newGenerations;
-          });
-          
-          setHistory(prev => [...prev, { 
-            type: 'output', 
-            content: `✓ Pixel art generated!` 
-          }]);
-          
-          // Mark that the user has generated an image
-          setHasGeneratedImage(true);
-          if (user) {
-            localStorage.setItem(`promixel_generated_${user.id}`, 'true');
-          }
-        } else {
-          // No image URL in the response
-          throw new Error('No image URL in response');
-        }
-      } catch (error) {
-        console.error('Error in generate command:', error);
-        setHistory(prev => [...prev, { 
-          type: 'error', 
-          content: `Error: ${error instanceof Error ? error.message : 'Failed to generate pixel art'}`
-        }]);
-      } finally {
-        setLoading(false);
-      }
+      const promptText = command.substring('generate '.length).trim();
+      await handleGenerate(promptText);
       return;
     }
-    
+
     // Unknown command
     setHistory(prev => [...prev, { 
       type: 'error', 
-      content: `Unknown command: ${command}`
+      content: `Unknown command: ${command}. Type 'help' for available commands.` 
     }]);
   };
 
@@ -504,7 +508,7 @@ export const Terminal = () => {
                   style={{ fontFamily: "var(--font-pixel)" }}
                   onClick={() => executeCommand(cmd)}
                 >{cmd}</span> - <span className="text-gray-300">{desc}</span>
-              </div>
+      </div>
             ))}
             <div className="text-base sm:text-lg mt-4 text-amber-300">
               Note: Limited to 1 image generation per user. This limit helps us provide high-quality images to everyone.
@@ -527,9 +531,9 @@ export const Terminal = () => {
               >
                 {cmd}
               </button>
-            ))}
-          </div>
-          
+        ))}
+      </div>
+
           {history.map((entry, i) => (
             <div 
               key={i} 
@@ -699,7 +703,7 @@ export const Terminal = () => {
                     ? 'bg-cyan-500/20 text-white' 
                     : 'text-gray-300 hover:bg-black/60'
                 }`}
-                onClick={() => {
+          onClick={() => {
                   if (suggestion === 'generate' && input.trim() !== 'generate') {
                     setInput('generate ');
                   } else {
@@ -719,7 +723,7 @@ export const Terminal = () => {
             ))}
           </div>
         )}
-      </div>
+    </div>
     </>
   );
 };

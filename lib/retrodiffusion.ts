@@ -19,7 +19,47 @@ const requestCache: { [key: string]: { result: GenerationResult, timestamp: numb
 
 // Track when the last request was made to prevent rapid fire requests
 let lastRequestTime = 0;
-const MIN_REQUEST_INTERVAL = 2000; // Minimum 2 seconds between requests
+const MIN_REQUEST_INTERVAL = 3000; // Increase to 3 seconds between requests
+
+// Track pending requests to prevent duplicate submissions
+let pendingRequests: { [key: string]: boolean } = {};
+
+// Track API request totals for monitoring
+let apiRequestsThisSession = 0;
+const MAX_REQUESTS_PER_SESSION = 50; // Safety limit
+
+// Check if we're in a browser environment
+const isBrowser = typeof window !== 'undefined';
+
+// Save request count to sessionStorage to persist across page refreshes but not browser sessions
+if (isBrowser) {
+  try {
+    const savedCount = sessionStorage.getItem('api_request_count');
+    if (savedCount) {
+      apiRequestsThisSession = parseInt(savedCount, 10);
+    }
+  } catch (e) {
+    console.error('Failed to access sessionStorage:', e);
+  }
+}
+
+/**
+ * Update API call metrics
+ */
+function trackApiRequest() {
+  apiRequestsThisSession++;
+  
+  if (isBrowser) {
+    try {
+      sessionStorage.setItem('api_request_count', apiRequestsThisSession.toString());
+      
+      // Also track the last request time to prevent rapid reloads from bypassing limits
+      sessionStorage.setItem('last_api_request_time', Date.now().toString());
+    } catch (e) {
+      console.error('Failed to update sessionStorage:', e);
+    }
+  }
+}
 
 /**
  * Generate pixel art using a secure server API route
@@ -36,79 +76,147 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
       };
     }
 
+    // Prevent API spamming by enforcing session limits
+    if (apiRequestsThisSession >= MAX_REQUESTS_PER_SESSION) {
+      console.warn('Session API request limit reached:', apiRequestsThisSession);
+      return {
+        imageUrl: getPlaceholderImageForError(429),
+        message: 'You have reached the maximum number of generations for this session. Please try again later.',
+        success: false
+      };
+    }
+
     // Normalize the prompt for caching (trim whitespace, lowercase)
     const normalizedPrompt = prompt.trim().toLowerCase();
     
     // Check if we have a cached result for this prompt
     const cachedResult = requestCache[normalizedPrompt];
-    if (cachedResult && Date.now() - cachedResult.timestamp < 1000 * 60 * 10) { // Cache valid for 10 minutes
-      console.log('Using cached result for prompt:', prompt);
+    if (cachedResult && Date.now() - cachedResult.timestamp < 1000 * 60 * 30) { // Cache valid for 30 minutes
+      console.log('Using cached result for prompt:', normalizedPrompt);
       return cachedResult.result;
     }
     
-    // Prevent API spamming by enforcing a minimum time between requests
-    const now = Date.now();
-    if (now - lastRequestTime < MIN_REQUEST_INTERVAL) {
-      console.log(`Request throttled. Please wait ${Math.ceil((MIN_REQUEST_INTERVAL - (now - lastRequestTime)) / 1000)} seconds.`);
+    // Check if this exact request is already pending
+    if (pendingRequests[normalizedPrompt]) {
+      console.log('Request already in progress for prompt:', normalizedPrompt);
       return {
         imageUrl: '',
-        message: 'Please wait a moment before generating another image to prevent API abuse.',
+        message: 'A generation with this prompt is already in progress. Please wait a moment.',
         success: false
       };
     }
     
-    // Update last request time
-    lastRequestTime = now;
-
-    console.log('Generating pixel art with prompt:', prompt);
+    // Prevent API spamming by enforcing a minimum time between requests
+    const now = Date.now();
     
-    // Call our secure API route instead of the RetoDiffusion API directly
-    const response = await fetch('/api/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ prompt })
-    });
-
-    // Parse the API response
-    const result = await response.json();
-    
-    if (!response.ok) {
-      // If there was an error, send back the error message
-      return {
-        imageUrl: getPlaceholderImageForError(response.status),
-        message: result.message || 'Error generating image',
-        success: false,
-        prompt: prompt
-      };
-    }
-    
-    // Add ASCII art to the result
-    const finalResult = {
-      ...result,
-      pixelArtAscii: generatePlaceholderAsciiArt(prompt)
-    };
-    
-    // Cache the successful result
-    if (result.success && result.imageUrl) {
-      requestCache[normalizedPrompt] = {
-        result: finalResult,
-        timestamp: Date.now()
-      };
-      
-      // Clean up old cache entries (keep last 20 successful generations)
-      const cacheEntries = Object.keys(requestCache);
-      if (cacheEntries.length > 20) {
-        const oldestKey = cacheEntries.reduce((oldest, key) => {
-          return requestCache[key].timestamp < requestCache[oldest].timestamp ? key : oldest;
-        }, cacheEntries[0]);
-        delete requestCache[oldestKey];
+    // Check both in-memory and session-stored last request time
+    let lastStoredRequestTime = 0;
+    if (isBrowser) {
+      try {
+        const storedTime = sessionStorage.getItem('last_api_request_time');
+        if (storedTime) {
+          lastStoredRequestTime = parseInt(storedTime, 10);
+        }
+      } catch (e) {
+        console.error('Failed to read from sessionStorage:', e);
       }
     }
     
-    // Return the successful result
-    return finalResult;
+    // Use the more recent of the two timestamps
+    const effectiveLastRequestTime = Math.max(lastRequestTime, lastStoredRequestTime);
+    
+    if (now - effectiveLastRequestTime < MIN_REQUEST_INTERVAL) {
+      const waitTime = Math.ceil((MIN_REQUEST_INTERVAL - (now - effectiveLastRequestTime)) / 1000);
+      console.log(`Request throttled. Please wait ${waitTime} seconds.`);
+      return {
+        imageUrl: '',
+        message: `Please wait ${waitTime} seconds before generating another image.`,
+        success: false
+      };
+    }
+    
+    // Mark this request as pending
+    pendingRequests[normalizedPrompt] = true;
+    
+    // Update last request time
+    lastRequestTime = now;
+    if (isBrowser) {
+      try {
+        sessionStorage.setItem('last_api_request_time', now.toString());
+      } catch (e) {
+        console.error('Failed to update sessionStorage:', e);
+      }
+    }
+
+    console.log('Generating pixel art with prompt:', normalizedPrompt);
+    
+    // Add a unique request ID to help identify duplicate requests on the server
+    const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+    
+    try {
+      // Call our secure API route instead of the RetoDiffusion API directly
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-ID': requestId,
+        },
+        body: JSON.stringify({ 
+          prompt,
+          cacheBuster: requestId // Include this to prevent browser caching
+        })
+      });
+
+      // Track the API request
+      trackApiRequest();
+
+      // Parse the API response
+      const result = await response.json();
+      
+      if (!response.ok) {
+        // If there was an error, send back the error message
+        delete pendingRequests[normalizedPrompt]; // Clear pending flag
+        return {
+          imageUrl: getPlaceholderImageForError(response.status),
+          message: result.message || 'Error generating image',
+          success: false,
+          prompt: prompt
+        };
+      }
+      
+      // Add ASCII art to the result
+      const finalResult = {
+        ...result,
+        pixelArtAscii: generatePlaceholderAsciiArt(prompt)
+      };
+      
+      // Cache the successful result
+      if (result.success && result.imageUrl) {
+        requestCache[normalizedPrompt] = {
+          result: finalResult,
+          timestamp: Date.now()
+        };
+        
+        // Clean up old cache entries (keep last 20 successful generations)
+        const cacheEntries = Object.keys(requestCache);
+        if (cacheEntries.length > 20) {
+          const oldestKey = cacheEntries.reduce((oldest, key) => {
+            return requestCache[key].timestamp < requestCache[oldest].timestamp ? key : oldest;
+          }, cacheEntries[0]);
+          delete requestCache[oldestKey];
+        }
+      }
+      
+      // Request completed, remove from pending
+      delete pendingRequests[normalizedPrompt];
+      
+      // Return the successful result
+      return finalResult;
+    } catch (error) {
+      // Clear pending status on error
+      delete pendingRequests[normalizedPrompt];
+      throw error; // Rethrow to be caught by the outer try/catch
+    }
     
   } catch (error) {
     console.error('Error generating pixel art:', error);
