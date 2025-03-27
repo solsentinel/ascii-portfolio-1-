@@ -57,6 +57,10 @@ export const Terminal = () => {
         if (hasGenerated === 'true') {
           setHasGeneratedImage(true);
         }
+        // Focus input when user signs in
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
       }
     };
     
@@ -73,6 +77,15 @@ export const Terminal = () => {
         } else {
           setHasGeneratedImage(false);
         }
+        // Focus input when auth state changes
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+        // Add welcome message to history
+        setHistory(prev => [...prev, { 
+          type: 'output', 
+          content: `Welcome ${session.user.email}! You can now generate pixel art.` 
+        }]);
       }
     });
 

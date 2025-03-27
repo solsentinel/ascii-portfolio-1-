@@ -3,6 +3,7 @@
 import { Auth } from '@supabase/auth-ui-react'
 import { ThemeSupa } from '@supabase/auth-ui-shared'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useEffect } from 'react'
 
 interface AuthModalProps {
   show: boolean
@@ -11,6 +12,19 @@ interface AuthModalProps {
 
 export default function AuthModal({ show, onClose }: AuthModalProps) {
   const supabase = createClientComponentClient()
+
+  // Listen for auth state changes to close modal on success
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        onClose()
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [onClose, supabase.auth])
 
   if (!show) return null
 
