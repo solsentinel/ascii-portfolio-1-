@@ -21,7 +21,7 @@ interface RecentGeneration {
 
 export const Terminal = () => {
   const [input, setInput] = useState<string>('');
-  const [history, setHistory] = useState<{ type: 'input' | 'output' | 'error', content: string }[]>([]);
+  const [history, setHistory] = useState<{ type: 'input' | 'output' | 'error' | 'info', content: string }[]>([]);
   const [prompt, setPrompt] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -142,15 +142,37 @@ export const Terminal = () => {
   };
 
   // Process generate command
-  const handleGenerate = async (promptText: string) => {
-    // Instead of generating an image, show server busy message
-    setHistory(prev => [...prev, { 
-      type: 'error', 
-      content: 'The server is too busy right now. Please try again after some time.' 
-    }]);
-    
-    // Don't proceed with generation
-    return;
+  const handleGenerate = async (prompt: string) => {
+    if (!prompt) {
+      setHistory(prev => [...prev, { type: 'error', content: 'Please provide a prompt for the image generation.' }])
+      return
+    }
+
+    // Show initial loading message
+    setHistory(prev => [...prev, 
+      { type: 'info', content: 'Initializing pixel art generation...' }
+    ])
+
+    // Simulate loading steps with delays
+    await new Promise(resolve => setTimeout(resolve, 1000))
+    setHistory(prev => [...prev, 
+      { type: 'info', content: 'Analyzing prompt and preparing parameters...' }
+    ])
+
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    setHistory(prev => [...prev, 
+      { type: 'info', content: 'Setting up generation pipeline...' }
+    ])
+
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    setHistory(prev => [...prev, 
+      { type: 'info', content: 'Attempting to connect to generation server...' }
+    ])
+
+    await new Promise(resolve => setTimeout(resolve, 1500))
+    setHistory(prev => [...prev, 
+      { type: 'error', content: 'The server is too busy right now. Please try again after some time.' }
+    ])
   };
 
   // Handle form submission
