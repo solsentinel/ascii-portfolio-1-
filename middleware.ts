@@ -187,7 +187,6 @@ export async function middleware(req: NextRequest) {
 // Update paths that should be handled by the middleware
 export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$).*)',
-    '/api/:path*'
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 } 

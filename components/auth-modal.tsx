@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from 'react'
-import AuthForm from './auth-form'
+import { Auth } from '@supabase/auth-ui-react'
+import { ThemeSupa } from '@supabase/auth-ui-shared'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 interface AuthModalProps {
   show: boolean
@@ -9,25 +10,26 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ show, onClose }: AuthModalProps) {
-  const [isMounted, setIsMounted] = useState(false)
+  const supabase = createClientComponentClient()
 
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
-
-  if (!isMounted) return null
   if (!show) return null
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="relative" onClick={(e) => e.stopPropagation()}>
-        <button 
-          className="absolute -top-10 right-0 text-white bg-black/50 hover:bg-black/70 rounded-full p-1 w-8 h-8 flex items-center justify-center"
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-black/90 p-6 rounded-lg border border-white/10 w-full max-w-md relative">
+        <button
           onClick={onClose}
+          className="absolute top-2 right-2 text-gray-400 hover:text-white"
         >
-          ✕
+          ×
         </button>
-        <AuthForm onAuthSuccess={onClose} />
+        <Auth
+          supabaseClient={supabase}
+          appearance={{ theme: ThemeSupa }}
+          theme="dark"
+          providers={[]}
+          redirectTo={`${window.location.origin}/auth/callback`}
+        />
       </div>
     </div>
   )
