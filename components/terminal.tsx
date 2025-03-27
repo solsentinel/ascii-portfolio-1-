@@ -188,29 +188,7 @@ export const Terminal = () => {
     ])
   };
 
-  // Add after the imports
-  const validateInput = (input: string): { isValid: boolean; error?: string } => {
-    // Check for maximum length
-    if (input.length > 500) {
-      return { isValid: false, error: 'Command too long. Please keep commands under 500 characters.' };
-    }
-
-    // Check for potentially malicious patterns
-    const maliciousPatterns = /[<>{}[\]\\\/;$]/g;
-    if (maliciousPatterns.test(input)) {
-      return { isValid: false, error: 'Invalid characters detected in command.' };
-    }
-
-    // Sanitize the input by removing any suspicious characters
-    const sanitized = input.replace(/[^a-zA-Z0-9\s-_]/g, '');
-    if (sanitized !== input) {
-      return { isValid: false, error: 'Command contains invalid characters.' };
-    }
-
-    return { isValid: true };
-  };
-
-  // Update handleSubmit function
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const command = input.trim();
@@ -218,18 +196,10 @@ export const Terminal = () => {
     // Don't process empty commands
     if (!command) return;
     
-    // Validate input
-    const validation = validateInput(command);
-    if (!validation.isValid) {
-      setHistory(prev => [...prev, { type: 'error', content: validation.error || 'Invalid command.' }]);
-      setInput('');
-      return;
-    }
-    
     // Add the command to history
     setHistory(prev => [...prev, { type: 'input', content: `> ${command}` }]);
     setInput('');
-
+    
     // Process commands
     if (command === 'clear') {
       setHistory([]);
@@ -283,18 +253,6 @@ export const Terminal = () => {
 
     if (command.startsWith('generate ')) {
       const promptText = command.substring('generate '.length).trim();
-      
-      // Additional prompt validation
-      if (!promptText) {
-        setHistory(prev => [...prev, { type: 'error', content: 'Please provide a prompt for generation.' }]);
-        return;
-      }
-
-      if (promptText.length > 200) {
-        setHistory(prev => [...prev, { type: 'error', content: 'Prompt too long. Please keep prompts under 200 characters.' }]);
-        return;
-      }
-
       await handleGenerate(promptText);
       return;
     }
