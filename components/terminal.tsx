@@ -169,42 +169,39 @@ export const Terminal = () => {
     try {
       setLoading(true);
       
-      // Direct API call to RetroDiffusion
+      // Using the official API approach
+      const apiUrl = "https://api.retrodiffusion.ai/v1/inferences";
+      
       const payload = {
-        prompt: prompt,
+        model: "RD_FLUX",
+        width: 512,
+        height: 512,
+        prompt: `Anime style pixel art, ${prompt}. The art style is cartoonish but detailed with striking colors and clever composition. Textures are well shaded and detailed. Clean shading and outlines`,
         negative: "",
-        width: 2048,
-        height: 2048,
         num_inference_steps: 20,
         guidance_scale: 5,
-        tiling_x: false,
-        tiling_y: false,
         num_images: 1,
         strength: 1,
+        tiling_x: false,
+        tiling_y: false,
         expand_prompt: false,
-        model: "RD_FLUX",
-        prompt_style: "Anime style pixel art, {prompt}. The art style is cartoonish but detailed with striking colors and clever composition. Textures are well shaded and detailed. Clean shading and outlines"
+        prompt_style: "anime"  // Using a valid value from the enum
       };
       
-      // URL encode the payload for the query parameter
-      const queryParam = encodeURIComponent(JSON.stringify(payload));
-      const apiUrl = `https://api.retrodiffusion.ai/inferences?input=${queryParam}`;
-      
-      const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY || '';
+      const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY || 'rdpk-49efebbfd373ad1fc39aa15f2c8df4f9';
       
       // Log what we're doing (helpful for debugging)
       setHistory(prev => [...prev, 
-        { type: 'info', content: `Sending request to RetroDiffusion API...` },
-        { type: 'info', content: `Using API key and AWS Cognito auth token` }
+        { type: 'info', content: `Sending request to RetroDiffusion API using official method...` }
       ]);
       
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-RD-Token': apiKey,
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_RETRODIFFUSION_AUTH_TOKEN || ''}`
-        }
+          'X-RD-Token': apiKey  // API key goes directly in X-RD-Token header
+        },
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -213,9 +210,9 @@ export const Terminal = () => {
         
         // Provide more specific error messages
         if (response.status === 401) {
-          throw new Error(`Authentication failed: Your API key or Authorization token may be invalid or expired`);
+          throw new Error(`Authentication failed: Your API key may be invalid or expired`);
         } else if (response.status === 403) {
-          throw new Error(`Access forbidden: Your API key or Authorization token may not have permission to use this endpoint`);
+          throw new Error(`Access forbidden: Your API key may not have permission to use this endpoint`);
         } else if (response.status === 404) {
           throw new Error(`API endpoint not found: The RetroDiffusion API URL may have changed`);
         } else {
@@ -226,13 +223,23 @@ export const Terminal = () => {
       const data = await response.json();
       console.log('API Response:', data);
 
-      // Handle the response format with URL instead of base64 images
-      if (!data || !data.output_images || !data.output_images[0] || !data.output_images[0].uri) {
-        throw new Error('Invalid response format from API');
-      }
+      // Handle both possible response formats
+      let imageUrl;
+      let seed;
 
-      const imageUrl = data.output_images[0].uri;
-      const seed = data.output_images[0].seed || Math.floor(Math.random() * 1000000);
+      // Format 1: output_images with uri
+      if (data.output_images && data.output_images[0] && data.output_images[0].uri) {
+        imageUrl = data.output_images[0].uri;
+        seed = data.output_images[0].seed || Math.floor(Math.random() * 1000000);
+      } 
+      // Format 2: base64_images array
+      else if (data.base64_images && data.base64_images[0]) {
+        imageUrl = `data:image/png;base64,${data.base64_images[0]}`;
+        seed = data.seed || Math.floor(Math.random() * 1000000);
+      } 
+      else {
+        throw new Error('Invalid response format from API - no image data found');
+      }
 
       // Add success message and image to history
       setHistory(prev => [...prev, 
@@ -526,10 +533,9 @@ export const Terminal = () => {
     }, 10);
   };
 
-  // Check if API key and auth token are set
+  // Check if API key is set
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY;
-    const authToken = process.env.NEXT_PUBLIC_RETRODIFFUSION_AUTH_TOKEN;
     
     if (!apiKey) {
       setHistory(prev => [...prev, { 
@@ -546,18 +552,6 @@ export const Terminal = () => {
       setHistory(prev => [...prev, { 
         type: 'info', 
         content: `RetroDiffusion API Key loaded: ${keyPrefix}... (${apiKey.length} chars)` 
-      }]);
-    }
-    
-    if (!authToken) {
-      setHistory(prev => [...prev, { 
-        type: 'error', 
-        content: 'WARNING: NEXT_PUBLIC_RETRODIFFUSION_AUTH_TOKEN is not set in .env.local file. API calls will fail.' 
-      }]);
-    } else {
-      setHistory(prev => [...prev, { 
-        type: 'info', 
-        content: `RetroDiffusion Auth Token loaded (${authToken.length} chars)` 
       }]);
     }
   }, []);
