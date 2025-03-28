@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Global API configuration
+const RETRODIFFUSION_API_KEY = process.env.RETRODIFFUSION_API_KEY || '';
+const RETRODIFFUSION_API_ENDPOINT = process.env.RETRODIFFUSION_API_ENDPOINT || 'https://api.retrodiffusion.ai/v1/inferences';
+
+// Validate API key at startup
+(() => {
+  if (!RETRODIFFUSION_API_KEY) {
+    console.error('WARNING: RETRODIFFUSION_API_KEY is not set in environment variables');
+  } else {
+    const keyPrefix = RETRODIFFUSION_API_KEY.substring(0, 7);
+    console.log(`RetroDiffusion API Key loaded: ${keyPrefix}... (${RETRODIFFUSION_API_KEY.length} chars)`);
+    console.log(`RetroDiffusion API Endpoint: ${RETRODIFFUSION_API_ENDPOINT}`);
+  }
+})();
+
 // Maximum prompt length for security
 const MAX_PROMPT_LENGTH = 1000;
 
@@ -83,11 +98,9 @@ export async function POST(request: NextRequest) {
       // Allow any origin in development or when deployed
       '*',
       // Keep specific origins for reference
-      'https://your-domain.com',
-      'https://www.your-domain.com',
       process.env.NEXT_PUBLIC_SITE_URL || '',
       'http://localhost:3000'
-    ];
+    ];  
     
     // Always allow requests with no origin (like from the browser directly)
     // Or when the request origin matches one of our allowed origins
@@ -161,8 +174,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Access API key securely from server environment variables (not exposed to client)
-    const apiKey = process.env.RETRODIFFUSION_API_KEY;
-    const apiEndpoint = process.env.RETRODIFFUSION_API_ENDPOINT || 'https://api.retrodiffusion.ai/v1/inferences';
+    const apiKey = RETRODIFFUSION_API_KEY;
+    const apiEndpoint = RETRODIFFUSION_API_ENDPOINT;
     
     if (!apiKey) {
       console.error('Missing API key for Retro Diffusion');
@@ -179,14 +192,13 @@ export async function POST(request: NextRequest) {
     const cleanedApiKey = cleanApiKey(apiKey);
     
     // Log environment check (for debugging) - avoid logging full key details in production
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('Environment check:', {
-        hasApiKey: !!cleanedApiKey,
-        apiEndpoint,
-        keyLength: cleanedApiKey?.length,
-        apiKeyFormat: cleanedApiKey?.startsWith('rdpk-') ? 'valid format' : 'invalid format'
-      });
-    }
+    console.log('Making request with:', {
+      apiKey: `${cleanedApiKey.substring(0, 7)}...`,
+      apiEndpoint,
+      keyLength: cleanedApiKey?.length,
+      apiKeyFormat: cleanedApiKey?.startsWith('rdpk-') ? 'valid format' : 'invalid format',
+      keyPrefix: cleanedApiKey?.substring(0, 5) // Log only first 5 chars for debugging
+    });
 
     // Sanitize prompt (basic sanitization)
     const sanitizedPrompt = sanitizePrompt(prompt);
@@ -195,186 +207,296 @@ export async function POST(request: NextRequest) {
     console.log(`Generation request from ${clientIp} - prompt length: ${sanitizedPrompt.length}`);
     
     // Create API request payload according to RetroFusion documentation
-    // Simplify the payload structure to solve 422 errors
     const payload = {
-      model: "RD_FLUX", // Try the original model name again
-      width: 256,
-      height: 256,
       prompt: sanitizedPrompt,
+      height: 256,
+      width: 256,
+      negative: "",
+      num_inference_steps: 20,
+      guidance_scale: 5,
+      strength: 0.75,
+      seed: Math.floor(Math.random() * 1000000),
       num_images: 1,
-      // Remove nested params object that might be causing issues
-      cfg_scale: 7.5,
-      steps: 30,
-      sampler: "ddim"
+      tiling_x: false,
+      tiling_y: false,
+      loras: {},
+      expand_prompt: false,
+      model: "RD_CLASSIC",
+      prompt_style: "default",
+      substyle: {
+        id: "",
+        name: "",
+        required_prompt_style_key: "",
+        model_override: "",
+        loras_override: {},
+        prompt_style_override: "",
+        latent_size_override: 0,
+        post_pipeline_override: "",
+        steps_override: 0,
+        img2img_steps_override: 0
+      },
+      pre_processing: {
+        pipeline: ""
+      }
     };
 
-    // Define headers with fallback options before diagnostic test
-    let mainRequestHeaders: Record<string, string> = {
+    // Log the full API endpoint for debugging
+    console.log(`Using API endpoint: ${apiEndpoint}`);
+
+    // Define headers with X-RD-Token as required by the API
+    const mainRequestHeaders = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cleanedApiKey}`,
-      'Accept': 'application/json'
+      'X-RD-Token': RETRODIFFUSION_API_KEY, // Use original API key directly from env
+      'Accept': 'application/json',
+      'User-Agent': 'Promixel/1.0 (NextJS Server)'
     };
 
-    // Make a diagnostic direct call to the API with minimal payload
-    // This will help identify exactly what format the API expects
-    console.log('Making diagnostic API call with minimal payload');
+    // Log request details with full debugging info
+    console.log('API Request Details:', {
+      endpoint: apiEndpoint,
+      method: 'POST',
+      headers: Object.keys(mainRequestHeaders),
+      keyLength: RETRODIFFUSION_API_KEY.length
+    });
+
+    // Make the API request
     try {
-      const diagnosticPayload = {
-        model: "RD_FLUX",
-        prompt: "test prompt",
-        width: 256,
-        height: 256,
-        num_images: 1
-      };
-
-      const diagnosticResponse = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: mainRequestHeaders,
-        body: JSON.stringify(diagnosticPayload)
+      // Log the payload (without the full prompt for privacy)
+      console.log('Request payload:', {
+        ...payload,
+        prompt: payload.prompt.substring(0, 20) + '...' // Only log first 20 chars of prompt
       });
-
-      // Log the complete diagnostic response
-      console.log('Diagnostic API call result:', {
-        status: diagnosticResponse.status,
-        statusText: diagnosticResponse.statusText,
-        headers: Object.fromEntries(diagnosticResponse.headers.entries())
-      });
-
-      // Get and log the response text
-      const diagnosticText = await diagnosticResponse.text();
-      console.log('Diagnostic response text:', diagnosticText.substring(0, 500));
       
-      // If we got a 401 error, try a different authorization method
-      if (diagnosticResponse.status === 401) {
-        console.log('Trying X-RD-Token header instead of Authorization');
-        const alternativeHeaders: Record<string, string> = {
-          'Content-Type': 'application/json',
-          'X-RD-Token': cleanedApiKey.startsWith('rdpk-') ? cleanedApiKey : `rdpk-${cleanedApiKey}`,
-          'Accept': 'application/json'
-        };
-        
-        // Make a second diagnostic test with alternative headers
-        const altDiagnosticResponse = await fetch(apiEndpoint, {
-          method: 'POST',
-          headers: alternativeHeaders,
-          body: JSON.stringify(diagnosticPayload)
-        });
-        
-        console.log('Alternative authentication method result:', {
-          status: altDiagnosticResponse.status,
-          statusText: altDiagnosticResponse.statusText
-        });
-        
-        if (altDiagnosticResponse.ok) {
-          console.log('SUCCESS: X-RD-Token authentication worked! Using this format.');
-          // Use the working headers for the main request
-          mainRequestHeaders = alternativeHeaders;
-        }
-      }
-
-      if (diagnosticResponse.ok) {
-        console.log('SUCCESS: Diagnostic API call worked! Using this format for main request.');
-        // Update the payload to match the working diagnostic payload
-        Object.keys(payload).forEach(key => {
-          if (!(key in diagnosticPayload)) {
-            // @ts-ignore - Safely remove extra keys that aren't in the working payload
-            delete payload[key];
-          }
-        });
-      }
-    } catch (diagnosticError) {
-      console.error('Diagnostic API call failed:', diagnosticError);
-    }
-
-    // Make the actual API request
-    console.log('Making main API request with headers:', Object.keys(mainRequestHeaders));
-    try {
-      const response = await fetch(apiEndpoint, {
+      // Make the request with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      console.log(`Making request to: ${apiEndpoint}`);
+      console.log(`With X-RD-Token as an object containing generation parameters`);
+      
+      // Try different endpoint variations if the main one fails
+      let response = await fetch(apiEndpoint, {
         method: 'POST',
-        headers: mainRequestHeaders,
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RD-Token': JSON.stringify({
+            prompt: sanitizedPrompt,
+            height: 256,
+            width: 256,
+            negative: "",
+            num_inference_steps: 20,
+            guidance_scale: 5,
+            strength: 0.75,
+            seed: Math.floor(Math.random() * 1000000),
+            num_images: 1,
+            tiling_x: false,
+            tiling_y: false,
+            loras: {},
+            expand_prompt: false,
+            model: "RD_CLASSIC",
+            prompt_style: "default",
+            substyle: {
+              id: "",
+              name: "",
+              required_prompt_style_key: "",
+              model_override: "",
+              loras_override: {},
+              prompt_style_override: "",
+              latent_size_override: 0,
+              post_pipeline_override: "",
+              steps_override: 0,
+              img2img_steps_override: 0
+            },
+            pre_processing: {
+              pipeline: ""
+            }
+          }),
+          'Accept': 'application/json',
+          'User-Agent': 'Promixel/1.0 (NextJS Server)'
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      }).finally(() => {
+        clearTimeout(timeoutId);
       });
 
-      // Improve error handling specifically for 422 errors
-      if (!response.ok) {
-        let errorText = "";
-        try {
-          errorText = await response.text();
-          console.error(`API error (HTTP ${response.status}): ${errorText.substring(0, 500)}`);
+      console.log(`API Response: Status ${response.status} ${response.statusText}`);
+      
+      // If we get a 404, try alternative API endpoints
+      if (response.status === 404) {
+        console.log('Trying alternative API endpoint format...');
+        
+        // Try alternative endpoints
+        const alternativeEndpoints = [
+          `https://api.retrodiffusion.ai/v1/inferences`, // Try /inferences first
+          `https://api.retrodiffusion.ai/api/v1/inferences`, 
+          `https://api.retrodiffusion.ai/v1/generate`,
+          `https://api.retrodiffusion.ai/api/v1/generate`
+        ];
+        
+        // Try alternative payload formats
+        const alternativePayloads = [
+          // Original format
+          payload,
           
-          // Specific handling for 422 errors to help debugging
-          if (response.status === 422) {
-            console.error('Validation Error (422) Details:', {
-              payload: JSON.stringify(payload),
-              apiKeyFormat: cleanedApiKey.startsWith('rdpk-') ? 'Correct format' : 'Missing prefix',
-              requestId,
-              responseFirstChars: errorText.substring(0, 300)
-            });
+          // Alternative format with num_inference_steps
+          {
+            ...payload,
+            num_inference_steps: payload.num_inference_steps,
+            guidance_scale: payload.guidance_scale
+          },
+          
+          // Alternative format with different field names
+          {
+            prompt: sanitizedPrompt,
+            height: 256,
+            width: 256,
+            negative: "",
+            num_inference_steps: 20,
+            guidance_scale: 5,
+            strength: 0.75,
+            seed: Math.floor(Math.random() * 1000000),
+            num_images: 1,
+            tiling_x: false,
+            tiling_y: false,
+            loras: {},
+            expand_prompt: false,
+            model: "RD_CLASSIC"
+          }
+        ];
+        
+        for (const altEndpoint of alternativeEndpoints) {
+          for (const altPayload of alternativePayloads) {
+            console.log(`Trying alternative endpoint: ${altEndpoint} with payload format ${Object.keys(altPayload).includes('num_inference_steps') ? 'v2' : 'v1'}`);
             
-            // Try to parse the error response for more details
+            const altController = new AbortController();
+            const altTimeoutId = setTimeout(() => altController.abort(), 30000);
+            
             try {
-              const errorJson = JSON.parse(errorText);
-              console.error('Parsed error details:', errorJson);
+              const altResponse = await fetch(altEndpoint, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-RD-Token': JSON.stringify({
+                    prompt: sanitizedPrompt,
+                    height: 256,
+                    width: 256,
+                    negative: "",
+                    num_inference_steps: 20,
+                    guidance_scale: 5,
+                    strength: 0.75,
+                    seed: Math.floor(Math.random() * 1000000),
+                    num_images: 1,
+                    tiling_x: false,
+                    tiling_y: false,
+                    loras: {},
+                    expand_prompt: false,
+                    model: "RD_CLASSIC",
+                    prompt_style: "default",
+                    substyle: {
+                      id: "",
+                      name: "",
+                      required_prompt_style_key: "",
+                      model_override: "",
+                      loras_override: {},
+                      prompt_style_override: "",
+                      latent_size_override: 0,
+                      post_pipeline_override: "",
+                      steps_override: 0,
+                      img2img_steps_override: 0
+                    },
+                    pre_processing: {
+                      pipeline: ""
+                    }
+                  }),
+                  'Accept': 'application/json',
+                  'User-Agent': 'Promixel/1.0 (NextJS Server)'
+                },
+                body: JSON.stringify(altPayload),
+                signal: altController.signal
+              }).finally(() => {
+                clearTimeout(altTimeoutId);
+              });
               
-              // Return a more helpful error message for end users
-              return NextResponse.json({
-                success: false,
-                message: `API Validation Error: ${errorJson.message || errorJson.error || 'The API rejected our request format'}. Please try a different prompt.`,
-                error: errorJson
-              }, { status: 422 });
-            } catch (parseError) {
-              // Couldn't parse the error as JSON
-              console.error('Failed to parse error response as JSON:', parseError);
+              console.log(`Alternative endpoint response: ${altResponse.status} ${altResponse.statusText}`);
+              
+              if (altResponse.ok || altResponse.status !== 404) {
+                // Use this response instead
+                response = altResponse;
+                console.log(`Using alternative endpoint: ${altEndpoint} with alternative payload`);
+                break;
+              }
+            } catch (altError) {
+              console.error(`Error with alternative endpoint ${altEndpoint}:`, altError);
             }
           }
           
-          // General error response for other status codes
+          // Break out if we found a working endpoint
+          if (response.ok || response.status !== 404) {
+            break;
+          }
+        }
+      }
+
+      // Handle response
+      if (!response.ok) {
+        let errorText = await response.text();
+        console.error(`API error (HTTP ${response.status}): ${errorText}`);
+        
+        // Log detailed information about the error
+        console.error('Error details:', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          errorTextSample: errorText.substring(0, 200),
+          apiEndpoint,
+          apiKeyPrefix: RETRODIFFUSION_API_KEY.substring(0, 7),
+          tokenHeaderValue: mainRequestHeaders['X-RD-Token'].substring(0, 7) + '...',
+          headersSent: JSON.stringify(mainRequestHeaders).substring(0, 100) + '...'
+        });
+        
+        try {
+          const errorJson = JSON.parse(errorText);
+          
+          // Check if this is an authentication error
+          if (response.status === 401 || 
+              (errorJson.detail && errorJson.detail.some((d: any) => 
+                d.msg && d.msg.includes('X-RD-Token')))) {
+            
+            console.error('Authentication error detected');
+            
+            return NextResponse.json({
+              success: false,
+              message: 'API Key Authentication Failed: Please check your API key',
+              error: {
+                ...errorJson,
+                apiKeyInfo: {
+                  prefix: RETRODIFFUSION_API_KEY.substring(0, 7),
+                  length: RETRODIFFUSION_API_KEY.length,
+                  format: RETRODIFFUSION_API_KEY.startsWith('rdpk-') ? 'Has prefix' : 'Missing prefix',
+                  headerSent: mainRequestHeaders['X-RD-Token'] ? 'Yes' : 'No'
+                }
+              }
+            }, { status: 401 });
+          }
+          
           return NextResponse.json({
             success: false,
-            message: `Error: HTTP status ${response.status}. ${
-              response.status === 401 || response.status === 403 ? 'API key may be invalid or expired.' : 
-              response.status === 429 ? 'Rate limit exceeded. Please try again later.' : 
-              'Please try again later.'
-            }`,
-            error: errorText.substring(0, 200)
+            message: `API Error: ${errorJson.message || errorJson.error || 'The API request failed'}`,
+            error: errorJson
           }, { status: response.status });
-        } catch (e) {
-          const errorObj = e as Error;
-          console.error('API error details:', {
-            error: errorText.substring(0, 500), // Limit log size
-            apiKeyFirstFiveChars: cleanedApiKey.substring(0, 5) // Log first 5 chars for debugging
-          });
+        } catch (parseError) {
+          return NextResponse.json({
+            success: false,
+            message: `API Error: ${response.statusText}`,
+            error: errorText
+          }, { status: response.status });
         }
       }
 
-      // Parse the response
-      let data;
-      let responseText = '';
-      try {
-        // First get the raw text to help with debugging
-        responseText = await response.text();
-        console.log('Received API response, length:', responseText.length);
-        
-        // Then parse it as JSON
-        try {
-          data = JSON.parse(responseText);
-        } catch (e) {
-          console.error('Failed to parse API response as JSON:', e);
-          console.error('Response text (first 500 chars):', responseText.substring(0, 500));
-          return NextResponse.json({ 
-            success: false, 
-            message: 'Invalid JSON response from the API' 
-          }, { status: 500 });
-        }
-      } catch (err) {
-        console.error('Failed to read API response:', err);
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Failed to read response from the API' 
-        }, { status: 500 });
-      }
-
-      // Validate response data
+      // Parse successful response
+      const data = await response.json();
+      
       if (!data || !data.base64_images || !data.base64_images[0]) {
         console.error('Invalid API response structure');
         return NextResponse.json({ 
@@ -387,19 +509,17 @@ export async function POST(request: NextRequest) {
       const response_data = {
         success: true,
         imageUrl: `data:image/png;base64,${data.base64_images[0]}`,
-        prompt: sanitizedPrompt,
-        remainingCredits: data.remaining_credits
+        prompt: sanitizedPrompt
       };
 
       const finalResponse = NextResponse.json(response_data);
       
-      // Add security headers and CORS headers to the success response
+      // Add security headers
       finalResponse.headers.set('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; script-src 'self'");
       finalResponse.headers.set('X-Content-Type-Options', 'nosniff');
       finalResponse.headers.set('X-Frame-Options', 'DENY');
       finalResponse.headers.set('X-XSS-Protection', '1; mode=block');
       finalResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-      finalResponse.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
       finalResponse.headers.set('Access-Control-Allow-Origin', origin || '*');
       finalResponse.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
       finalResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Request-ID');
@@ -407,10 +527,37 @@ export async function POST(request: NextRequest) {
       return finalResponse;
     } catch (fetchError) {
       console.error('Fetch error when calling RetoDiffusion API:', fetchError);
+      
+      // Provide more detailed error information
+      const errorDetails = {
+        message: fetchError instanceof Error ? fetchError.message : String(fetchError),
+        type: fetchError instanceof Error ? fetchError.name : typeof fetchError,
+        apiEndpoint,
+        apiKeyValid: !!cleanedApiKey && cleanedApiKey.length > 10,
+        timeStamp: new Date().toISOString()
+      };
+      
+      console.error('Detailed error info:', errorDetails);
+      
+      // Check for specific error types
+      let errorMessage = 'Network error when connecting to the image generation API';
+      let statusCode = 500;
+      
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          errorMessage = 'The request to the image generation API timed out. Please try again.';
+          statusCode = 504; // Gateway Timeout
+        } else if (fetchError.message.includes('ENOTFOUND') || fetchError.message.includes('ECONNREFUSED')) {
+          errorMessage = 'Could not connect to the image generation API. Please try again later.';
+          statusCode = 503; // Service Unavailable
+        }
+      }
+      
       return NextResponse.json({ 
         success: false, 
-        message: 'Network error when connecting to the image generation API' 
-      }, { status: 500 });
+        message: errorMessage,
+        error: errorDetails
+      }, { status: statusCode });
     }
   } catch (error) {
     console.error('Error generating pixel art:', error);
@@ -469,9 +616,19 @@ function cleanApiKey(apiKey: string): string {
   let cleaned = apiKey.trim();
   
   // Ensure it has the correct prefix
-  if (!cleaned.startsWith('rdpk-') && cleaned.includes('rdpk-')) {
-    cleaned = 'rdpk-' + cleaned.split('rdpk-')[1];
+  if (!cleaned.startsWith('rdpk-')) {
+    // If it contains the prefix somewhere in the string, extract from there
+    if (cleaned.includes('rdpk-')) {
+      cleaned = 'rdpk-' + cleaned.split('rdpk-')[1];
+    } 
+    // Otherwise, add the prefix
+    else {
+      cleaned = `rdpk-${cleaned}`;
+    }
   }
+  
+  // Log the cleaned key (just the prefix) for debugging
+  console.log(`Cleaned API key: ${cleaned.substring(0, 7)}...`);
   
   return cleaned;
 } 

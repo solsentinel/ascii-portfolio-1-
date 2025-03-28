@@ -355,44 +355,52 @@ export const generatePixelArt = async (prompt: string): Promise<GenerationResult
 };
 
 /**
- * Download an image from a URL
- * @param url URL of the image to download
- * @param filename Name to save the file as
+ * Download the generated pixel art
+ * @param url Image URL to download (can be a data URI or external URL)
+ * @param filename Filename to save the image as
  */
 export const downloadPixelArt = async (url: string, filename: string): Promise<void> => {
   try {
-    if (!url) {
-      throw new Error('No image URL provided for download');
-    }
+    // Handle different URL types
+    let blob;
     
-    // For data URLs, we can download directly
     if (url.startsWith('data:')) {
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      return;
+      // For data URIs, we can fetch directly
+      const response = await fetch(url);
+      blob = await response.blob();
+    } else if (url.startsWith('http')) {
+      // For external URLs, we need to create a proxy to avoid CORS issues
+      // or download directly if CORS allows it
+      try {
+        // Try direct download first
+        const response = await fetch(url, { mode: 'cors' });
+        blob = await response.blob();
+      } catch (error) {
+        // If direct download fails due to CORS, try to proxy through our server
+        console.log('Direct download failed, trying through proxy...');
+        const response = await fetch('/api/proxy-image?url=' + encodeURIComponent(url));
+        blob = await response.blob();
+      }
+    } else {
+      throw new Error('Invalid URL format');
     }
     
-    // For remote URLs, we need to fetch first
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    
+    // Create a download link and click it
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = objectUrl;
+    a.href = blobUrl;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     
     // Clean up
-    URL.revokeObjectURL(objectUrl);
+    setTimeout(() => {
+      URL.revokeObjectURL(blobUrl);
+    }, 100);
   } catch (error) {
     console.error('Error downloading image:', error);
-    throw new Error('Failed to download the image');
+    throw error;
   }
 };
 

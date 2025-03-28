@@ -21,7 +21,7 @@ interface RecentGeneration {
 
 export const Terminal = () => {
   const [input, setInput] = useState<string>('');
-  const [history, setHistory] = useState<{ type: 'input' | 'output' | 'error' | 'info', content: string }[]>([]);
+  const [history, setHistory] = useState<{ type: 'input' | 'output' | 'error' | 'info' | 'success' | 'image', content: string }[]>([]);
   const [prompt, setPrompt] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -82,10 +82,10 @@ export const Terminal = () => {
           inputRef.current.focus();
         }
         // Add welcome message to history
-        setHistory(prev => [...prev, { 
-          type: 'output', 
-          content: `Welcome ${session.user.email}! You can now generate pixel art.` 
-        }]);
+        setHistory(prev => [...prev, 
+          { type: 'output', 
+            content: `Welcome ${session.user.email}! You can now generate pixel art.` 
+          }]);
       }
     });
 
@@ -166,26 +166,99 @@ export const Terminal = () => {
       { type: 'info', content: 'Initializing pixel art generation...' }
     ])
 
-    // Simulate loading steps with delays
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setHistory(prev => [...prev, 
-      { type: 'info', content: 'Analyzing prompt and preparing parameters...' }
-    ])
+    try {
+      setLoading(true);
+      
+      // Direct API call to RetroDiffusion
+      const payload = {
+        prompt: prompt,
+        negative: "",
+        width: 2048,
+        height: 2048,
+        num_inference_steps: 20,
+        guidance_scale: 5,
+        tiling_x: false,
+        tiling_y: false,
+        num_images: 1,
+        strength: 1,
+        expand_prompt: false,
+        model: "RD_FLUX",
+        prompt_style: "Anime style pixel art, {prompt}. The art style is cartoonish but detailed with striking colors and clever composition. Textures are well shaded and detailed. Clean shading and outlines"
+      };
+      
+      // URL encode the payload for the query parameter
+      const queryParam = encodeURIComponent(JSON.stringify(payload));
+      const apiUrl = `https://api.retrodiffusion.ai/inferences?input=${queryParam}`;
+      
+      const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY || '';
+      
+      // Log what we're doing (helpful for debugging)
+      setHistory(prev => [...prev, 
+        { type: 'info', content: `Sending request to RetroDiffusion API...` },
+        { type: 'info', content: `Using API key and AWS Cognito auth token` }
+      ]);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-RD-Token': apiKey,
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_RETRODIFFUSION_AUTH_TOKEN || ''}`
+        }
+      });
 
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setHistory(prev => [...prev, 
-      { type: 'info', content: 'Setting up generation pipeline...' }
-    ])
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API error (HTTP ${response.status}):`, errorText);
+        
+        // Provide more specific error messages
+        if (response.status === 401) {
+          throw new Error(`Authentication failed: Your API key or Authorization token may be invalid or expired`);
+        } else if (response.status === 403) {
+          throw new Error(`Access forbidden: Your API key or Authorization token may not have permission to use this endpoint`);
+        } else if (response.status === 404) {
+          throw new Error(`API endpoint not found: The RetroDiffusion API URL may have changed`);
+        } else {
+          throw new Error(`Generation failed (${response.status}): ${response.statusText}`);
+        }
+      }
 
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    setHistory(prev => [...prev, 
-      { type: 'info', content: 'Attempting to connect to generation server...' }
-    ])
+      const data = await response.json();
+      console.log('API Response:', data);
 
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setHistory(prev => [...prev, 
-      { type: 'error', content: 'The server is too busy right now. Please try again after some time.' }
-    ])
+      // Handle the response format with URL instead of base64 images
+      if (!data || !data.output_images || !data.output_images[0] || !data.output_images[0].uri) {
+        throw new Error('Invalid response format from API');
+      }
+
+      const imageUrl = data.output_images[0].uri;
+      const seed = data.output_images[0].seed || Math.floor(Math.random() * 1000000);
+
+      // Add success message and image to history
+      setHistory(prev => [...prev, 
+        { type: 'success', content: `Image generated successfully! (Seed: ${seed})` },
+        { type: 'image', content: imageUrl }
+      ]);
+
+      // Update the image URL and prompt state
+      setImageUrl(imageUrl);
+      setPrompt(prompt);
+
+      // Add to recent generations
+      setRecentGenerations(prev => [{
+        prompt,
+        imageUrl: imageUrl,
+        timestamp: new Date()
+      }, ...prev].slice(0, 9)); // Keep only last 9 generations
+
+    } catch (error) {
+      console.error('Generation error:', error);
+      setHistory(prev => [...prev, 
+        { type: 'error', content: error instanceof Error ? error.message : 'Failed to generate image. Please try again.' }
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Handle form submission
@@ -264,19 +337,29 @@ export const Terminal = () => {
     }]);
   };
 
-  // Validate if a base64 image is valid
-  const isValidBase64Image = (url: string): boolean => {
-    if (!url.startsWith('data:image')) return false;
+  // Validate if an image URL is valid (either base64 or HTTP URL)
+  const isValidImage = (url: string): boolean => {
+    if (!url) return false;
     
-    try {
-      const base64 = url.split(',')[1];
-      if (!base64) return false;
-      atob(base64); // This will throw if invalid
-      return true;
-    } catch (e) {
-      console.error('Invalid base64 image:', e);
-      return false;
+    // Handle HTTP/HTTPS URLs
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return true; // Assume valid URL
     }
+    
+    // Handle base64 images
+    if (url.startsWith('data:image')) {
+      try {
+        const base64 = url.split(',')[1];
+        if (!base64) return false;
+        atob(base64); // This will throw if invalid
+        return true;
+      } catch (e) {
+        console.error('Invalid base64 image:', e);
+        return false;
+      }
+    }
+    
+    return false;
   };
 
   // Handle image load success
@@ -443,6 +526,42 @@ export const Terminal = () => {
     }, 10);
   };
 
+  // Check if API key and auth token are set
+  useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_RETRODIFFUSION_API_KEY;
+    const authToken = process.env.NEXT_PUBLIC_RETRODIFFUSION_AUTH_TOKEN;
+    
+    if (!apiKey) {
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'WARNING: NEXT_PUBLIC_RETRODIFFUSION_API_KEY is not set in .env.local file. API calls will fail.' 
+      }]);
+    } else if (!apiKey.startsWith('rdpk-')) {
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'WARNING: API key does not start with "rdpk-". Make sure you\'ve entered the correct key format.' 
+      }]);
+    } else {
+      const keyPrefix = apiKey.substring(0, 7);
+      setHistory(prev => [...prev, { 
+        type: 'info', 
+        content: `RetroDiffusion API Key loaded: ${keyPrefix}... (${apiKey.length} chars)` 
+      }]);
+    }
+    
+    if (!authToken) {
+      setHistory(prev => [...prev, { 
+        type: 'error', 
+        content: 'WARNING: NEXT_PUBLIC_RETRODIFFUSION_AUTH_TOKEN is not set in .env.local file. API calls will fail.' 
+      }]);
+    } else {
+      setHistory(prev => [...prev, { 
+        type: 'info', 
+        content: `RetroDiffusion Auth Token loaded (${authToken.length} chars)` 
+      }]);
+    }
+  }, []);
+
   return (
     <>
       <div className="w-full max-w-4xl mx-auto h-full flex flex-col">
@@ -540,7 +659,7 @@ export const Terminal = () => {
                   </div>
                 )}
                 
-                {!imageError && isValidBase64Image(imageUrl) && !imageUrl.includes('text=Credit+Limit+Reached') && (
+                {!imageError && isValidImage(imageUrl) && !imageUrl.includes('text=Credit+Limit+Reached') && (
                   <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mt-3 sm:mt-4 w-full">
                     <button 
                       onClick={handleDownload}
